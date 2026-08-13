@@ -35,6 +35,9 @@ backend is wired up.
 - Singles and Doubles tournaments
 - Round Robin (auto fixtures + standings) and single-elimination Bracket (auto
   seeding, random seeding option, BYEs)
+- Best-of series for brackets: Best of 3 (first to 2 wins) for regular rounds
+  and Best of 5 (first to 3 wins) for the Final — winning games in a row closes
+  the series early
 - 15-point and 21-point scoring with win-by-2 rules and caps (17-15 / 30-29)
 - Score recording, editing, and re-opening matches
 - Dashboard, Standings, and interactive Bracket views

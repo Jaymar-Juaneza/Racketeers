@@ -2,7 +2,11 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { uid } from "../lib/utils.js";
 import { generateRoundRobinMatches } from "../lib/tournament/roundRobin.js";
-import { generateBracket, refreshBracket } from "../lib/tournament/bracket.js";
+import {
+  generateBracket,
+  refreshBracket,
+  resolveSeries,
+} from "../lib/tournament/bracket.js";
 import { resolveScoreState } from "../lib/tournament/scoring.js";
 
 export const useTournamentStore = create(
@@ -121,22 +125,70 @@ export const useTournamentStore = create(
         }));
       },
 
+      recordGame: (tournamentId, matchId, scoreA, scoreB) => {
+        set((state) => ({
+          tournaments: state.tournaments.map((t) => {
+            if (t.id !== tournamentId || t.format !== "bracket") return t;
+
+            const matches = t.matches.map((m) => {
+              if (m.id !== matchId || m.status === "bye" || m.status === "completed") {
+                return m;
+              }
+              const games = [
+                ...(Array.isArray(m.games) ? m.games : []),
+                { id: uid("g"), scoreA, scoreB },
+              ];
+              const { status, winnerId } = resolveSeries({ ...m, games });
+              return { ...m, games, status, winnerId };
+            });
+
+            return { ...t, matches: refreshBracket(matches) };
+          }),
+        }));
+      },
+
+      undoGame: (tournamentId, matchId) => {
+        set((state) => ({
+          tournaments: state.tournaments.map((t) => {
+            if (t.id !== tournamentId || t.format !== "bracket") return t;
+
+            const matches = t.matches.map((m) => {
+              if (m.id !== matchId || m.status === "bye") return m;
+              const games = Array.isArray(m.games)
+                ? m.games.slice(0, -1)
+                : [];
+              const { status, winnerId } = resolveSeries({ ...m, games });
+              return { ...m, games, status, winnerId };
+            });
+
+            return { ...t, matches: refreshBracket(matches) };
+          }),
+        }));
+      },
+
       reopenMatch: (tournamentId, matchId) => {
         set((state) => ({
           tournaments: state.tournaments.map((t) => {
             if (t.id !== tournamentId) return t;
 
-            const matches = t.matches.map((m) =>
-              m.id === matchId
-                ? {
-                    ...m,
-                    scoreA: null,
-                    scoreB: null,
-                    winnerId: null,
-                    status: "scheduled",
-                  }
-                : m,
-            );
+            const matches = t.matches.map((m) => {
+              if (m.id !== matchId) return m;
+              if (t.format === "bracket") {
+                return {
+                  ...m,
+                  games: [],
+                  winnerId: null,
+                  status: "scheduled",
+                };
+              }
+              return {
+                ...m,
+                scoreA: null,
+                scoreB: null,
+                winnerId: null,
+                status: "scheduled",
+              };
+            });
 
             const resolved =
               t.format === "bracket" ? refreshBracket(matches) : matches;
@@ -148,6 +200,26 @@ export const useTournamentStore = create(
     }),
     {
       name: "atsi-racketeers-tournaments",
+      version: 2,
+      migrate: (persistedState) => {
+        const state = persistedState ?? {};
+        const tournaments = (state.tournaments ?? []).map((t) => {
+          if (t.format !== "bracket") return t;
+          const matches = (t.matches ?? []).map((m) => {
+            if (Array.isArray(m.games)) return m;
+            const isBye = m.status === "bye";
+            return {
+              ...m,
+              games: [],
+              gamesToWin: m.roundName === "Final" ? 3 : 2,
+              status: isBye ? "bye" : "scheduled",
+              winnerId: isBye ? m.winnerId : null,
+            };
+          });
+          return { ...t, matches };
+        });
+        return { ...state, tournaments };
+      },
     },
   ),
 );

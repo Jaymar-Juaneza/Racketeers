@@ -5,7 +5,12 @@ import {
   selectTournament,
   useTournamentStore,
 } from "../store/tournamentStore.js";
-import { championOf, groupByRound } from "../lib/tournament/bracket.js";
+import {
+  championOf,
+  groupByRound,
+  resolveSeries,
+  bestOfLabel,
+} from "../lib/tournament/bracket.js";
 import { displayName } from "../lib/participants.js";
 import { Button } from "../components/ui/button.jsx";
 import {
@@ -57,6 +62,10 @@ function BracketMatchCard({ match, participantMap, isChampion }) {
   const aWon = match.status === "completed" && match.winnerId === match.participantAId;
   const bWon = match.status === "completed" && match.winnerId === match.participantBId;
 
+  const { seriesScoreA, seriesScoreB } = resolveSeries(match);
+  const showSeries =
+    match.status === "completed" || (match.games?.length ?? 0) > 0;
+
   if (match.status === "bye") {
     return (
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -75,12 +84,17 @@ function BracketMatchCard({ match, participantMap, isChampion }) {
         isChampion ? "border-amber-300 ring-2 ring-amber-200" : "border-slate-200",
       )}
     >
-      <div className="border-b border-slate-100 bg-slate-50 px-3 py-1 text-center text-[10px] font-bold uppercase tracking-wide text-slate-400">
-        {match.roundName}
+      <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-3 py-1">
+        <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+          {match.roundName}
+        </span>
+        <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-primary">
+          {bestOfLabel(match)}
+        </span>
       </div>
-      <BracketRow player={a} won={aWon} score={match.scoreA} />
+      <BracketRow player={a} won={aWon} score={showSeries ? seriesScoreA : null} />
       <div className="h-px bg-slate-100" />
-      <BracketRow player={b} won={bWon} score={match.scoreB} />
+      <BracketRow player={b} won={bWon} score={showSeries ? seriesScoreB : null} />
     </div>
   );
 }

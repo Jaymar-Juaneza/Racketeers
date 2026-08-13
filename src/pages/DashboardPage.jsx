@@ -145,6 +145,9 @@ export default function DashboardPage() {
                   : "Tournament Bracket"}
               </Badge>
               <Badge variant="slate">{tournament.pointSystem} points</Badge>
+              {tournament.format === "bracket" && (
+                <Badge variant="green">Best of 3 · Final Best of 5</Badge>
+              )}
             </div>
           </div>
 

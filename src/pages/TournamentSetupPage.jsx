@@ -132,6 +132,24 @@ export default function TournamentSetupPage() {
         Back to home
       </Link>
 
+      <ol className="mb-4 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-500">
+        <li className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-white">
+          1 · Details
+        </li>
+        <li aria-hidden className="text-slate-300">
+          →
+        </li>
+        <li className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-slate-500">
+          2 · Participants
+        </li>
+        <li aria-hidden className="text-slate-300">
+          →
+        </li>
+        <li className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-slate-500">
+          3 · Generate
+        </li>
+      </ol>
+
       <div className="mb-6">
         <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
           New {category === "singles" ? "Singles" : "Doubles"} Tournament
@@ -196,10 +214,27 @@ export default function TournamentSetupPage() {
               onClick={() => setValue("format", "bracket")}
               icon={<Swords className="h-5 w-5" />}
               title="Tournament Bracket"
-              description="Single-elimination knockout with auto-seeding and automatic BYEs."
+              description="Single-elimination knockout · best of 3 series (first to 2), Final best of 5 (first to 3)."
             />
           </CardContent>
         </Card>
+
+        {format === "bracket" && (
+          <Card className="border-blue-200 bg-blue-50/50">
+            <CardContent className="flex items-start gap-3 p-4 text-sm text-slate-600">
+              <Swords className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <div>
+                <p className="font-bold text-slate-800">Series format</p>
+                <p className="mt-1">
+                  Regular matches are <strong>Best of 3</strong> (first to 2
+                  wins). The Final is <strong>Best of 5</strong> (first to 3
+                  wins). Each game still follows the {pointSystem}-point,
+                  win-by-2 rule.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>

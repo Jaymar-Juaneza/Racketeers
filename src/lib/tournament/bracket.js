@@ -49,6 +49,66 @@ function roundName(round, totalRounds) {
   return `Round of ${2 ** (remaining + 1)}`;
 }
 
+// Series ("best of") rules for bracket matches:
+//   Regular rounds — best of 3 (first to 2 wins)
+//   Final round    — best of 5 (first to 3 wins)
+export const REGULAR_GAMES_TO_WIN = 2;
+export const FINALS_GAMES_TO_WIN = 3;
+
+export function gamesToWin(match) {
+  if (typeof match?.gamesToWin === "number") return match.gamesToWin;
+  return match?.roundName === "Final"
+    ? FINALS_GAMES_TO_WIN
+    : REGULAR_GAMES_TO_WIN;
+}
+
+export function bestOfLabel(match) {
+  return `Best of ${gamesToWin(match) * 2 - 1}`;
+}
+
+export function firstToLabel(match) {
+  return `First to ${gamesToWin(match)} wins`;
+}
+
+/** Count games won by each side from the recorded games array. */
+export function seriesScore(match) {
+  const games = Array.isArray(match?.games) ? match.games : [];
+  let a = 0;
+  let b = 0;
+  for (const g of games) {
+    if (g.scoreA > g.scoreB) a += 1;
+    else if (g.scoreB > g.scoreA) b += 1;
+  }
+  return { a, b };
+}
+
+/**
+ * Derive the series state (status, winner, games won) from the games array.
+ * A side wins the moment it reaches `gamesToWin` — so 2-0 or 3-0 closes the
+ * series early ("wins in a row" automatically ends the match).
+ */
+export function resolveSeries(match) {
+  const { a, b } = seriesScore(match);
+  const toWin = gamesToWin(match);
+  const played = Array.isArray(match?.games) ? match.games.length : 0;
+
+  let status = played > 0 ? "live" : "scheduled";
+  let winnerId = null;
+
+  if (a >= toWin || b >= toWin) {
+    status = "completed";
+    winnerId = a > b ? match.participantAId : match.participantBId;
+  }
+
+  return {
+    status,
+    winnerId,
+    seriesScoreA: a,
+    seriesScoreB: b,
+    gamesToWin: toWin,
+  };
+}
+
 /**
  * Generate a single-elimination bracket with auto-seeding and BYEs.
  *
@@ -88,8 +148,8 @@ export function generateBracket(participants, seeding = "auto") {
         roundName: roundName(1, rounds),
         participantAId: a ? a.id : null,
         participantBId: b ? b.id : null,
-        scoreA: null,
-        scoreB: null,
+        games: [],
+        gamesToWin: roundName(1, rounds) === "Final" ? 3 : 2,
         winnerId: player.id,
         status: "bye",
         isBye: true,
@@ -102,8 +162,8 @@ export function generateBracket(participants, seeding = "auto") {
         roundName: roundName(1, rounds),
         participantAId: a.id,
         participantBId: b.id,
-        scoreA: null,
-        scoreB: null,
+        games: [],
+        gamesToWin: roundName(1, rounds) === "Final" ? 3 : 2,
         winnerId: null,
         status: "scheduled",
         isBye: false,
@@ -122,8 +182,8 @@ export function generateBracket(participants, seeding = "auto") {
         roundName: roundName(round, rounds),
         participantAId: null,
         participantBId: null,
-        scoreA: null,
-        scoreB: null,
+        games: [],
+        gamesToWin: roundName(round, rounds) === "Final" ? 3 : 2,
         winnerId: null,
         status: "scheduled",
         isBye: false,
@@ -170,8 +230,7 @@ export function refreshBracket(matches) {
             ...m,
             participantAId: aId,
             participantBId: bId,
-            scoreA: null,
-            scoreB: null,
+            games: [],
             winnerId: null,
             status: "scheduled",
           };
