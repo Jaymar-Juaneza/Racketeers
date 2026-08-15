@@ -7,10 +7,11 @@ Badminton Tournament Manager for organizing Singles and Doubles competitions.
 - React 19 (JavaScript) + React DOM 19
 - Vite 8 (dev server / build)
 - Tailwind CSS v4
-- Zustand (state management, persisted)
+- Zustand (state management, persisted to localStorage)
 - React Router (routing)
 - React Hook Form + Zod (forms / validation)
 - React Compiler + ESLint 10 (with `eslint-plugin-react-hooks` and `eslint-plugin-react-refresh`)
+- Firebase (Authentication for the admin + Cloud Firestore for live state & history)
 
 ## Getting started
 
@@ -22,13 +23,49 @@ npm run lint     # lint
 npm run preview  # preview production build
 ```
 
-## Organizer login
+## How it works
 
-A lightweight, static client-side gate protects tournament management. The
-shared password lives in `src/lib/auth/staticAuth.js` (override it via
-`VITE_ORGANIZER_PASSWORD` in a local `.env` file). This is **not** a real
-security boundary — database protection will come from Supabase RLS once the
-backend is wired up.
+- The website opens **directly on the public dashboard** — no account needed.
+- Spectators can browse tournaments, live scores, standings and brackets from
+  any device.
+- A separate **"Login as admin"** button lets an organizer sign in to create
+  tournaments, manage participants and record scores.
+- **Live tournament state** is published to Firestore (`tournaments`
+  collection) so it can be viewed live across devices.
+- **Firestore also keeps a permanent, append-only history** of every finished
+  game in the `game_logs` collection.
+
+## Accounts & roles
+
+- Only an **admin** signs in (Firebase Auth email/password, username-based).
+- Any other account is treated as a viewer and is **rejected at login**.
+
+### Creating the admin account
+
+Registration was removed from the app, so create the admin once in the Firebase
+console:
+
+1. Open the [Firebase console](https://console.firebase.google.com) and select
+   the `rocketeers-5ad3d` project.
+2. Go to **Build → Authentication → Sign-in method** and make sure
+   **Email/Password** is enabled.
+3. Go to **Authentication → Users → Add user**:
+   - Email: `admin@rocketeers.app`
+   - Password: `Hanabishi1234!` (or your own)
+4. Copy the **User UID** shown for the new user.
+5. Go to **Firestore Database → Start collection** and create a collection
+   named `users` with a document whose **Document ID = the User UID**, and these
+   fields:
+   - `uid` (string) → the User UID
+   - `username` (string) → `admin`
+   - `role` (string) → `admin`
+6. Publish the rules in `firestore.rules` (see below).
+
+You can now sign in with username `admin` and the password you set.
+
+> If an admin account was created before this refactor (via the old registration
+> flow), it already exists — just confirm its `users` document has
+> `role: "admin"`.
 
 ## Features
 
@@ -38,13 +75,26 @@ backend is wired up.
 - Best-of series for brackets: Best of 3 (first to 2 wins) for regular rounds
   and Best of 5 (first to 3 wins) for the Final — winning games in a row closes
   the series early
-- 15-point and 21-point scoring with win-by-2 rules and caps (17-15 / 30-29)
-- Score recording, editing, and re-opening matches
+- 15-point and 21-point scoring with win-by-2 rules and no upper cap
+- Score recording with **− / + steppers**, editing, and re-opening matches
 - Dashboard, Standings, and interactive Bracket views
 - Responsive desktop / tablet / mobile layout
 
-## Backend (not yet configured)
+## Firebase setup
 
-Supabase (PostgreSQL + RLS) and Vercel hosting are planned but intentionally
-not wired up yet. Provide the credentials listed in `.env.example` before
-backend integration begins — the build currently runs entirely on local state.
+Three collections are used:
+
+- `users` — one doc per account (`uid`, `username`, `role`)
+- `tournaments` — the live tournament state (readable by everyone, writable by
+  admins)
+- `game_logs` — permanent append-only history of finished games
+
+1. In the Firebase console, enable **Authentication → Email/Password**.
+2. Create a **Cloud Firestore** database.
+3. Paste the contents of `firestore.rules` into **Firestore Database → Rules**
+   and publish.
+4. Create the admin user as described above.
+
+The web config is already embedded in `src/lib/firebase.js` for the
+`rocketeers-5ad3d` project (override it with `VITE_FIREBASE_*` in a local
+`.env` if needed).

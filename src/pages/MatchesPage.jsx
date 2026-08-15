@@ -1,12 +1,20 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Check, RotateCcw, Save, Swords, Undo2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  Minus,
+  Plus,
+  RotateCcw,
+  Swords,
+  Undo2,
+} from "lucide-react";
 import {
   selectTournament,
   useTournamentStore,
 } from "../store/tournamentStore.js";
+import { useAuthStore } from "../store/authStore.js";
 import { displayName } from "../lib/participants.js";
-import { scoreError } from "../lib/tournament/scoring.js";
 import {
   bestOfLabel,
   firstToLabel,
@@ -15,7 +23,6 @@ import {
 import { statusLabel, statusVariant } from "../lib/matchStatus.js";
 import { Badge } from "../components/ui/badge.jsx";
 import { Button } from "../components/ui/button.jsx";
-import { Input } from "../components/ui/input.jsx";
 import {
   Card,
   CardContent,
@@ -26,149 +33,152 @@ import TournamentNav from "../components/TournamentNav.jsx";
 import { cn } from "../lib/utils.js";
 
 /* ------------------------------------------------------------------ */
-/* Single-game match card (used for round robin)                       */
+/* Live score controls                                                */
 /* ------------------------------------------------------------------ */
 
-function MatchCard({ match, tournament, participantMap, onSave, onReopen }) {
-  const [scoreA, setScoreA] = useState(
-    match.scoreA == null ? "" : String(match.scoreA),
+function ScoreButton({ children, onClick, disabled, label }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-line bg-white text-xl font-extrabold text-ink shadow-sm transition-all hover:border-primary/40 hover:bg-mist hover:text-primary active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+    >
+      {children}
+    </button>
   );
-  const [scoreB, setScoreB] = useState(
-    match.scoreB == null ? "" : String(match.scoreB),
-  );
-  const [error, setError] = useState("");
+}
 
+function LiveScoreControl({ value, onIncrement, disabled = false, label }) {
+  return (
+    <div className="flex items-center justify-center gap-2 sm:gap-3">
+      <ScoreButton
+        onClick={() => onIncrement(-1)}
+        disabled={disabled}
+        label={`Decrease ${label} score`}
+      >
+        <Minus className="h-5 w-5" />
+      </ScoreButton>
+      <span className="min-w-12 text-center text-3xl font-extrabold tabular-nums text-ink sm:text-4xl">
+        {value}
+      </span>
+      <ScoreButton
+        onClick={() => onIncrement(1)}
+        disabled={disabled}
+        label={`Increase ${label} score`}
+      >
+        <Plus className="h-5 w-5" />
+      </ScoreButton>
+    </div>
+  );
+}
+
+function NameBlock({ participant, align = "right" }) {
+  if (!participant) {
+    return (
+      <div className={cn("min-w-0", align === "right" ? "text-right" : "text-left")}>
+        <p className="truncate text-sm font-bold text-ink">TBD</p>
+      </div>
+    );
+  }
+  return (
+    <div className={cn("min-w-0", align === "right" ? "text-right" : "text-left")}>
+      <p className="truncate text-sm font-bold text-ink">
+        {displayName(participant)}
+      </p>
+      {participant.type === "team" && (
+        <p className="truncate text-xs text-muted">
+          {participant.player1} & {participant.player2}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Single-game match card (round robin)                                */
+/* ------------------------------------------------------------------ */
+
+function MatchCard({
+  match,
+  participantMap,
+  onIncrement,
+  onReopen,
+  readOnly = false,
+}) {
   const a = match.participantAId ? participantMap.get(match.participantAId) : null;
   const b = match.participantBId ? participantMap.get(match.participantBId) : null;
 
   const isBye = match.status === "bye";
   const isTbd = !a || !b;
-
-  const handleSave = () => {
-    if (isTbd) return;
-    const aNum = scoreA === "" ? null : Number.parseInt(scoreA, 10);
-    const bNum = scoreB === "" ? null : Number.parseInt(scoreB, 10);
-
-    const err = scoreError(aNum, bNum, tournament.pointSystem);
-    if (err) {
-      setError(err);
-      return;
-    }
-    setError("");
-    onSave(match.id, aNum, bNum);
-  };
-
-  const handleReopen = () => {
-    setScoreA("");
-    setScoreB("");
-    setError("");
-    onReopen(match.id);
-  };
+  const isCompleted = match.status === "completed";
+  const scoreA = match.scoreA ?? 0;
+  const scoreB = match.scoreB ?? 0;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="rounded-xl border border-line bg-white p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <Badge variant={statusVariant(match.status)}>
           {statusLabel(match.status)}
         </Badge>
-        {match.status === "completed" && (
-          <Button variant="destructiveOutline" size="sm" onClick={handleReopen}>
+        {!readOnly && isCompleted && (
+          <Button
+            variant="destructiveOutline"
+            size="sm"
+            onClick={() => onReopen(match.id)}
+          >
             <RotateCcw className="h-3.5 w-3.5" />
             Re-open
           </Button>
         )}
       </div>
 
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <NameBlock participant={a} align="right" />
+        <span className="text-xs font-extrabold uppercase text-muted/70">vs</span>
+        <NameBlock participant={b} align="left" />
+      </div>
+
       {isBye ? (
-        <div className="py-2 text-center text-sm font-semibold text-slate-600">
+        <div className="py-2 text-center text-sm font-semibold text-muted">
           {displayName(a ?? b)} advances on a bye
         </div>
-      ) : (
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-          <div className="min-w-0 text-right">
-            <p className="truncate text-sm font-bold text-slate-800">
-              {a ? displayName(a) : "TBD"}
-            </p>
-            {a?.type === "team" && (
-              <p className="truncate text-xs text-slate-500">
-                {a.player1} & {a.player2}
-              </p>
-            )}
+      ) : isTbd ? (
+        <p className="mt-3 text-center text-xs font-medium text-muted/70">
+          To be decided
+        </p>
+      ) : readOnly ? (
+        match.status === "scheduled" ? (
+          <p className="mt-3 py-1 text-center text-xs font-medium text-muted/70">
+            Not yet played
+          </p>
+        ) : (
+          <div className="mt-4 flex items-center justify-center gap-3 text-2xl font-extrabold tabular-nums text-ink">
+            <span>{match.scoreA}</span>
+            <span className="text-muted/40">–</span>
+            <span>{match.scoreB}</span>
           </div>
-
-          <span className="text-xs font-extrabold uppercase text-slate-400">
-            vs
-          </span>
-
-          <div className="min-w-0 text-left">
-            <p className="truncate text-sm font-bold text-slate-800">
-              {b ? displayName(b) : "TBD"}
-            </p>
-            {b?.type === "team" && (
-              <p className="truncate text-xs text-slate-500">
-                {b.player1} & {b.player2}
-              </p>
-            )}
-          </div>
+        )
+      ) : isCompleted ? (
+        <div className="mt-4 flex items-center justify-center gap-3 text-2xl font-extrabold tabular-nums text-ink">
+          <span>{match.scoreA}</span>
+          <span className="text-muted/40">–</span>
+          <span>{match.scoreB}</span>
         </div>
-      )}
-
-      {!isBye && (
-        <div className="mt-4">
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-            <Input
-              type="number"
-              inputMode="numeric"
-              min="0"
-              value={scoreA}
-              disabled={isTbd}
-              onChange={(e) => {
-                setScoreA(e.target.value);
-                setError("");
-              }}
-              placeholder="0"
-              className="text-center text-lg font-bold"
-              aria-label={`Score for ${a ? displayName(a) : "TBD"}`}
-            />
-            <span className="text-lg font-extrabold text-slate-300">–</span>
-            <Input
-              type="number"
-              inputMode="numeric"
-              min="0"
-              value={scoreB}
-              disabled={isTbd}
-              onChange={(e) => {
-                setScoreB(e.target.value);
-                setError("");
-              }}
-              placeholder="0"
-              className="text-center text-lg font-bold"
-              aria-label={`Score for ${b ? displayName(b) : "TBD"}`}
-            />
-          </div>
-
-          {isTbd ? (
-            <p className="mt-3 text-center text-xs font-medium text-slate-400">
-              Waiting for earlier results before this match can be scored.
-            </p>
-          ) : (
-            <>
-              {error && (
-                <p className="mt-3 text-center text-sm font-medium text-accent">
-                  {error}
-                </p>
-              )}
-              <Button
-                variant="secondary"
-                size="sm"
-                className="mt-3 w-full"
-                onClick={handleSave}
-              >
-                <Save className="h-4 w-4" />
-                {match.status === "completed" ? "Update score" : "Save score"}
-              </Button>
-            </>
-          )}
+      ) : (
+        <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+          <LiveScoreControl
+            value={scoreA}
+            onIncrement={(d) => onIncrement(match.id, "A", d)}
+            label={a ? displayName(a) : "TBD"}
+          />
+          <span className="text-lg font-extrabold text-muted/40">–</span>
+          <LiveScoreControl
+            value={scoreB}
+            onIncrement={(d) => onIncrement(match.id, "B", d)}
+            label={b ? displayName(b) : "TBD"}
+          />
         </div>
       )}
     </div>
@@ -176,18 +186,21 @@ function MatchCard({ match, tournament, participantMap, onSave, onReopen }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Best-of series match card (used for brackets)                       */
+/* Best-of series match card (brackets)                                */
 /* ------------------------------------------------------------------ */
 
 function GamePips({ won, target }) {
   return (
-    <span className="inline-flex items-center gap-1.5" aria-label={`${won} of ${target} games won`}>
+    <span
+      className="inline-flex items-center gap-1.5"
+      aria-label={`${won} of ${target} games won`}
+    >
       {Array.from({ length: target }, (_, i) => (
         <span
           key={i}
           className={cn(
             "h-2.5 w-2.5 rounded-full transition-colors",
-            i < won ? "bg-primary" : "bg-slate-200",
+            i < won ? "bg-primary" : "bg-line",
           )}
         />
       ))}
@@ -199,61 +212,41 @@ function SeriesMatchCard({
   match,
   tournament,
   participantMap,
-  onRecord,
-  onReopen,
+  onIncrement,
   onUndo,
+  onReopen,
+  readOnly = false,
 }) {
-  const [scoreA, setScoreA] = useState("");
-  const [scoreB, setScoreB] = useState("");
-  const [error, setError] = useState("");
-
   const a = match.participantAId ? participantMap.get(match.participantAId) : null;
   const b = match.participantBId ? participantMap.get(match.participantBId) : null;
 
   const isBye = match.status === "bye";
   const isTbd = !a || !b;
   const games = Array.isArray(match.games) ? match.games : [];
+  const live = match.live ?? null;
+  const liveScoreA = live?.scoreA ?? 0;
+  const liveScoreB = live?.scoreB ?? 0;
   const { seriesScoreA, seriesScoreB, gamesToWin } = resolveSeries(match);
   const seriesOver = match.status === "completed";
-  const winner =
-    seriesOver && match.winnerId === match.participantAId ? a : b;
-
-  const handleSave = () => {
-    if (isTbd || seriesOver) return;
-    const aNum = scoreA === "" ? null : Number.parseInt(scoreA, 10);
-    const bNum = scoreB === "" ? null : Number.parseInt(scoreB, 10);
-
-    const err = scoreError(aNum, bNum, tournament.pointSystem);
-    if (err) {
-      setError(err);
-      return;
-    }
-    setError("");
-    onRecord(match.id, aNum, bNum);
-    setScoreA("");
-    setScoreB("");
-  };
-
-  const handleReopen = () => {
-    setScoreA("");
-    setScoreB("");
-    setError("");
-    onReopen(match.id);
-  };
+  const winner = seriesOver && match.winnerId === match.participantAId ? a : b;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="rounded-xl border border-line bg-white p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={statusVariant(match.status)}>
             {statusLabel(match.status)}
           </Badge>
-          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+          <span className="rounded-full bg-mist px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
             {bestOfLabel(match)} · {firstToLabel(match).toLowerCase()}
           </span>
         </div>
-        {seriesOver && (
-          <Button variant="destructiveOutline" size="sm" onClick={handleReopen}>
+        {!readOnly && seriesOver && (
+          <Button
+            variant="destructiveOutline"
+            size="sm"
+            onClick={() => onReopen(match.id)}
+          >
             <RotateCcw className="h-3.5 w-3.5" />
             Re-open series
           </Button>
@@ -261,33 +254,13 @@ function SeriesMatchCard({
       </div>
 
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-        <div className="min-w-0 text-right">
-          <p className="truncate text-sm font-bold text-slate-800">
-            {a ? displayName(a) : "TBD"}
-          </p>
-          {a?.type === "team" && (
-            <p className="truncate text-xs text-slate-500">
-              {a.player1} & {a.player2}
-            </p>
-          )}
-        </div>
-
-        <span className="text-xs font-extrabold uppercase text-slate-400">vs</span>
-
-        <div className="min-w-0 text-left">
-          <p className="truncate text-sm font-bold text-slate-800">
-            {b ? displayName(b) : "TBD"}
-          </p>
-          {b?.type === "team" && (
-            <p className="truncate text-xs text-slate-500">
-              {b.player1} & {b.player2}
-            </p>
-          )}
-        </div>
+        <NameBlock participant={a} align="right" />
+        <span className="text-xs font-extrabold uppercase text-muted/70">vs</span>
+        <NameBlock participant={b} align="left" />
       </div>
 
       {isBye ? (
-        <div className="py-2 text-center text-sm font-semibold text-slate-600">
+        <div className="py-2 text-center text-sm font-semibold text-muted">
           {displayName(a ?? b)} advances on a bye
         </div>
       ) : (
@@ -296,16 +269,16 @@ function SeriesMatchCard({
           <div className="rounded-lg bg-light/50 px-4 py-3">
             <div className="flex items-center justify-center gap-6">
               <div className="flex flex-col items-center gap-1">
-                <span className="text-2xl font-extrabold tabular-nums text-slate-900">
+                <span className="text-2xl font-extrabold tabular-nums text-ink">
                   {seriesScoreA}
                 </span>
                 <GamePips won={seriesScoreA} target={gamesToWin} />
               </div>
-              <span className="text-xs font-extrabold uppercase tracking-wide text-slate-400">
+              <span className="text-xs font-extrabold uppercase tracking-wide text-muted/70">
                 games won
               </span>
               <div className="flex flex-col items-center gap-1">
-                <span className="text-2xl font-extrabold tabular-nums text-slate-900">
+                <span className="text-2xl font-extrabold tabular-nums text-ink">
                   {seriesScoreB}
                 </span>
                 <GamePips won={seriesScoreB} target={gamesToWin} />
@@ -315,22 +288,21 @@ function SeriesMatchCard({
 
           {/* Game log */}
           {games.length > 0 && (
-            <div className="overflow-hidden rounded-lg border border-slate-100">
-              <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-1">
-                <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+            <div className="overflow-hidden rounded-lg border border-line">
+              <div className="flex items-center justify-between border-b border-line bg-mist px-3 py-1">
+                <span className="text-[10px] font-bold uppercase tracking-wide text-muted/70">
                   Games played
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError("");
-                    onUndo(match.id);
-                  }}
-                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-slate-500 hover:bg-slate-100 hover:text-accent"
-                >
-                  <Undo2 className="h-3 w-3" />
-                  Undo last game
-                </button>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => onUndo(match.id)}
+                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-muted hover:bg-mist hover:text-accent"
+                  >
+                    <Undo2 className="h-3 w-3" />
+                    Undo last game
+                  </button>
+                )}
               </div>
               {games.map((g, i) => {
                 const aWon = g.scoreA > g.scoreB;
@@ -338,34 +310,30 @@ function SeriesMatchCard({
                 return (
                   <div
                     key={g.id ?? i}
-                    className="flex items-center gap-3 border-b border-slate-100 px-3 py-1.5 text-sm last:border-0"
+                    className="flex items-center gap-3 border-b border-line px-3 py-1.5 text-sm last:border-0"
                   >
-                    <span className="w-14 shrink-0 text-xs font-semibold text-slate-400">
+                    <span className="w-14 shrink-0 text-xs font-semibold text-muted/70">
                       Game {i + 1}
                     </span>
                     <span
                       className={cn(
                         "flex-1 text-right font-bold tabular-nums",
-                        aWon ? "text-primary" : "text-slate-400",
+                        aWon ? "text-primary" : "text-muted/70",
                       )}
                     >
                       {g.scoreA}
                     </span>
-                    <span className="text-xs text-slate-300">–</span>
+                    <span className="text-xs text-muted/40">–</span>
                     <span
                       className={cn(
                         "flex-1 text-left font-bold tabular-nums",
-                        bWon ? "text-primary" : "text-slate-400",
+                        bWon ? "text-primary" : "text-muted/70",
                       )}
                     >
                       {g.scoreB}
                     </span>
-                    <span className="w-20 shrink-0 truncate text-right text-xs font-medium text-slate-500">
-                      {aWon
-                        ? displayName(a)
-                        : bWon
-                          ? displayName(b)
-                          : ""}
+                    <span className="w-20 shrink-0 truncate text-right text-xs font-medium text-muted">
+                      {aWon ? displayName(a) : bWon ? displayName(b) : ""}
                     </span>
                   </div>
                 );
@@ -379,60 +347,40 @@ function SeriesMatchCard({
               {displayName(winner)} wins the series
             </div>
           ) : isTbd ? (
-            <p className="text-center text-xs font-medium text-slate-400">
+            <p className="text-center text-xs font-medium text-muted/70">
               Waiting for earlier results before this match can be played.
             </p>
+          ) : readOnly ? (
+            live || games.length > 0 ? (
+              <div className="flex items-center justify-center gap-3 py-1 text-2xl font-extrabold tabular-nums text-ink">
+                <span>{liveScoreA}</span>
+                <span className="text-muted/40">–</span>
+                <span>{liveScoreB}</span>
+              </div>
+            ) : (
+              <p className="py-1 text-center text-xs font-medium text-muted/70">
+                Not yet played
+              </p>
+            )
           ) : (
-            <>
-              <p className="text-center text-xs font-semibold text-slate-500">
-                Record game {games.length + 1} score
+            <div className="flex flex-col gap-3">
+              <p className="text-center text-xs font-semibold text-muted">
+                Game {games.length + 1} · first to {tournament.pointSystem}, win by 2
               </p>
               <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                <Input
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  value={scoreA}
-                  onChange={(e) => {
-                    setScoreA(e.target.value);
-                    setError("");
-                  }}
-                  placeholder="0"
-                  className="text-center text-lg font-bold"
-                  aria-label={`Game ${games.length + 1} score for ${a ? displayName(a) : "TBD"}`}
+                <LiveScoreControl
+                  value={liveScoreA}
+                  onIncrement={(d) => onIncrement(match.id, "A", d)}
+                  label={a ? displayName(a) : "TBD"}
                 />
-                <span className="text-lg font-extrabold text-slate-300">–</span>
-                <Input
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  value={scoreB}
-                  onChange={(e) => {
-                    setScoreB(e.target.value);
-                    setError("");
-                  }}
-                  placeholder="0"
-                  className="text-center text-lg font-bold"
-                  aria-label={`Game ${games.length + 1} score for ${b ? displayName(b) : "TBD"}`}
+                <span className="text-lg font-extrabold text-muted/40">–</span>
+                <LiveScoreControl
+                  value={liveScoreB}
+                  onIncrement={(d) => onIncrement(match.id, "B", d)}
+                  label={b ? displayName(b) : "TBD"}
                 />
               </div>
-
-              {error && (
-                <p className="text-center text-sm font-medium text-accent">
-                  {error}
-                </p>
-              )}
-
-              <Button
-                variant="secondary"
-                size="sm"
-                className="w-full"
-                onClick={handleSave}
-              >
-                <Save className="h-4 w-4" />
-                Save game
-              </Button>
-            </>
+            </div>
           )}
         </div>
       )}
@@ -448,12 +396,13 @@ export default function MatchesPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const tournament = useTournamentStore((s) => selectTournament(s, id));
-  const saveScore = useTournamentStore((s) => s.saveScore);
-  const recordGame = useTournamentStore((s) => s.recordGame);
+  const incrementScore = useTournamentStore((s) => s.incrementScore);
   const undoGame = useTournamentStore((s) => s.undoGame);
   const reopenMatch = useTournamentStore((s) => s.reopenMatch);
+  const isAdmin = useAuthStore((s) => s.profile?.role === "admin");
 
   const isBracket = tournament?.format === "bracket";
+  const readOnly = !isAdmin;
 
   const participantMap = useMemo(() => {
     if (!tournament) return new Map();
@@ -478,10 +427,10 @@ export default function MatchesPage() {
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <p className="text-lg font-semibold text-slate-700">
+          <p className="text-lg font-semibold text-ink">
             Tournament not found
           </p>
-          <Button variant="outline" className="mt-4" onClick={() => navigate("/home")}>
+          <Button variant="outline" className="mt-4" onClick={() => navigate("/")}>
             Back to home
           </Button>
         </CardContent>
@@ -494,7 +443,7 @@ export default function MatchesPage() {
       <div className="flex flex-col gap-6">
         <Link
           to={`/tournament/${tournament.id}`}
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-primary"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-primary"
         >
           <ArrowLeft className="h-4 w-4" />
           Dashboard
@@ -502,18 +451,20 @@ export default function MatchesPage() {
         <TournamentNav tournament={tournament} />
         <Card>
           <CardContent className="py-12 text-center">
-            <p className="text-lg font-semibold text-slate-700">
+            <p className="text-lg font-semibold text-ink">
               No fixtures generated yet
             </p>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-muted">
               Add participants and generate matches first.
             </p>
-            <Button
-              className="mt-4"
-              onClick={() => navigate(`/tournament/${tournament.id}/participants`)}
-            >
-              Add participants
-            </Button>
+            {isAdmin && (
+              <Button
+                className="mt-4"
+                onClick={() => navigate(`/tournament/${tournament.id}/participants`)}
+              >
+                Add participants
+              </Button>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -524,7 +475,7 @@ export default function MatchesPage() {
     <div className="flex flex-col gap-6">
       <Link
         to={`/tournament/${tournament.id}`}
-        className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-primary"
+        className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-primary"
       >
         <ArrowLeft className="h-4 w-4" />
         Dashboard
@@ -533,24 +484,24 @@ export default function MatchesPage() {
       <TournamentNav tournament={tournament} />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-          Match Management
+        <h2 className="text-2xl font-bold tracking-tight text-ink">
+          {isAdmin ? "Match Management" : "Matches"}
         </h2>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-muted">
           {isBracket
             ? "Best of 3 · Finals best of 5"
-            : `Win by 2 · ${tournament.pointSystem}-point games`}
+            : `First to ${tournament.pointSystem} · win by 2 (no cap)`}
         </p>
       </div>
 
       {isBracket && (
-        <div className="flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm text-slate-600">
+        <div className="flex items-start gap-3 rounded-xl border border-line bg-mist/70 px-4 py-3 text-sm text-muted">
           <Swords className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <p>
-            <strong className="text-slate-800">Best-of series:</strong> regular
-            matches are first to 2 wins, and the Final is first to 3 wins. A
-            team that wins games in a row closes the series early — no extra
-            games needed.
+            <strong className="text-ink">Best-of series:</strong> regular
+            matches are first to 2 wins, and the Final is first to 3 wins. Each
+            game is won by reaching {tournament.pointSystem} points with a
+            2-point lead.
           </p>
         </div>
       )}
@@ -563,7 +514,7 @@ export default function MatchesPage() {
           <CardContent className="grid gap-4 md:grid-cols-2">
             {group.matches.map((m) => {
               const matchKey = isBracket
-                ? `${m.id}:${m.status}:${m.games?.length ?? 0}`
+                ? `${m.id}:${m.status}:${m.games?.length ?? 0}:${m.live?.scoreA ?? 0}:${m.live?.scoreB ?? 0}`
                 : `${m.id}:${m.status}:${m.scoreA}:${m.scoreB}`;
               return isBracket ? (
                 <SeriesMatchCard
@@ -571,8 +522,9 @@ export default function MatchesPage() {
                   match={m}
                   tournament={tournament}
                   participantMap={participantMap}
-                  onRecord={(matchId, a, b) =>
-                    recordGame(tournament.id, matchId, a, b)
+                  readOnly={readOnly}
+                  onIncrement={(matchId, side, delta) =>
+                    incrementScore(tournament.id, matchId, side, delta)
                   }
                   onUndo={(matchId) => undoGame(tournament.id, matchId)}
                   onReopen={(matchId) => reopenMatch(tournament.id, matchId)}
@@ -581,10 +533,10 @@ export default function MatchesPage() {
                 <MatchCard
                   key={matchKey}
                   match={m}
-                  tournament={tournament}
                   participantMap={participantMap}
-                  onSave={(matchId, a, b) =>
-                    saveScore(tournament.id, matchId, a, b)
+                  readOnly={readOnly}
+                  onIncrement={(matchId, side, delta) =>
+                    incrementScore(tournament.id, matchId, side, delta)
                   }
                   onReopen={(matchId) => reopenMatch(tournament.id, matchId)}
                 />

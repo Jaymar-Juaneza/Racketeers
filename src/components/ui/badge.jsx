@@ -1,12 +1,12 @@
 import { cn } from "../../lib/utils.js";
 
 const variants = {
-  default: "bg-light text-primary border-blue-200",
+  default: "bg-mist text-primary border-line",
   blue: "bg-primary text-white border-primary",
   red: "bg-red-100 text-accent border-red-200",
   green: "bg-emerald-100 text-emerald-700 border-emerald-200",
   amber: "bg-amber-100 text-amber-700 border-amber-200",
-  slate: "bg-slate-100 text-slate-600 border-slate-200",
+  slate: "bg-mist text-muted border-line",
 };
 
 export function Badge({ className, variant = "default", ...props }) {
@@ -21,5 +21,3 @@ export function Badge({ className, variant = "default", ...props }) {
     />
   );
 }
-
-

@@ -1,18 +1,21 @@
-// Badminton scoring rules: win by 2, with a hard cap.
+// Badminton scoring rules: win by 2, with no upper cap.
 //
-//  15-point mode:  first to 15, win by 2, maximum score 17-15
-//  21-point mode:  first to 21, win by 2, maximum score 30-29
+//  15-point mode:  first to 15, win by 2 — no maximum score.
+//  21-point mode:  first to 21, win by 2 — no maximum score.
 //
-// Valid example finals: 15-13, 21-19, 22-20, 23-21
-// Invalid:             15-14, 21-20 (not a 2-point lead)
+// Valid example finishes: 15-13, 21-19, 22-20, 25-23, 30-28, 35-33
+// Invalid:               15-14, 21-20, 21-19 (not a 2-point lead)
 
 export const POINT_SYSTEMS = {
-  15: { label: "15 Points", target: 15, cap: 17 },
-  21: { label: "21 Points", target: 21, cap: 30 },
+  15: { label: "15 Points", target: 15 },
+  21: { label: "21 Points", target: 21 },
 };
 
 /**
  * Returns true if the two scores represent a finished, legal match.
+ * A match is finished when the winner has reached the target points AND leads
+ * by at least 2. There is no upper limit.
+ *
  * @param {number} a
  * @param {number} b
  * @param {number} pointSystem 15 | 21
@@ -33,29 +36,10 @@ export function isValidFinishedScore(a, b, pointSystem) {
 
   const winner = Math.max(a, b);
   const loser = Math.min(a, b);
-  const diff = winner - loser;
 
   if (winner < system.target) return false; // nobody reached the target yet
-  if (winner > system.cap) return false; // past the cap
 
-  // Hard cap: 17 can only be reached as 17-15 (15-point), and 30 can only be
-  // reached as 30-29 (21-point).
-  if (winner === system.cap) {
-    return pointSystem === 21
-      ? loser === system.cap - 1
-      : loser === system.cap - 2;
-  }
-
-  // Win by two.
-  if (diff < 2) return false;
-
-  // Once we go past the target (deuce), the game ends the moment a player
-  // leads by exactly two — so beyond the target the lead is always exactly 2.
-  if (winner > system.target && diff !== 2) {
-    return false;
-  }
-
-  return true;
+  return winner - loser >= 2; // win by two, no cap
 }
 
 /**
@@ -110,21 +94,8 @@ export function scoreError(scoreA, scoreB, pointSystem) {
   if (winner < system.target) {
     return `The winner must reach at least ${system.target} points.`;
   }
-  if (winner > system.cap) {
-    return `The maximum allowed score is ${system.cap}-${system.cap - (pointSystem === 21 ? 1 : 2)}.`;
-  }
-  if (winner === system.cap) {
-    const maxLoser = pointSystem === 21 ? system.cap - 1 : system.cap - 2;
-    if (loser !== maxLoser) {
-      return `The only valid ${system.cap}-point finish is ${system.cap}-${maxLoser}.`;
-    }
-    return null;
-  }
   if (diff < 2) {
-    return `A match must be won by 2 points (e.g. ${system.target}-${system.target - 2}).`;
-  }
-  if (winner > system.target && diff !== 2) {
-    return `Past ${system.target} points, the winning margin must be exactly 2.`;
+    return "A match must be won by a 2-point lead.";
   }
   return null;
 }

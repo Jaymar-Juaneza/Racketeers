@@ -7,215 +7,425 @@ import {
   refreshBracket,
   resolveSeries,
 } from "../lib/tournament/bracket.js";
-import { resolveScoreState } from "../lib/tournament/scoring.js";
+import {
+  isValidFinishedScore,
+  resolveScoreState,
+} from "../lib/tournament/scoring.js";
+import { logGameResult } from "../lib/history.js";
+import { db } from "../lib/firebase.js";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  setDoc,
+} from "firebase/firestore";
+import { useAuthStore } from "./authStore.js";
+
+/* ------------------------------------------------------------------ */
+/* Firestore mapping helpers                                           */
+/* ------------------------------------------------------------------ */
+
+function mapRow(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    format: row.format,
+    pointSystem: row.pointSystem,
+    seeding: row.seeding ?? null,
+    participants: Array.isArray(row.participants) ? row.participants : [],
+    matches: Array.isArray(row.matches) ? row.matches : [],
+    status: row.status,
+    createdAt: row.createdAt,
+  };
+}
+
+/**
+ * Publish the current tournament state to Firestore so spectators can view it
+ * live from any device. The permanent history is written separately to
+ * `game_logs` (see lib/history.js).
+ */
+function syncTournament(tournament) {
+  const userId = useAuthStore.getState().user?.uid ?? null;
+  const ref = doc(db, "tournaments", tournament.id);
+  return setDoc(ref, {
+    name: tournament.name,
+    category: tournament.category,
+    format: tournament.format,
+    pointSystem: tournament.pointSystem,
+    seeding: tournament.seeding ?? null,
+    participants: tournament.participants,
+    matches: tournament.matches,
+    status: tournament.status,
+    createdBy: userId,
+    createdAt: tournament.createdAt,
+  });
+}
+
+/**
+ * Live, local-first tournament store.
+ *
+ * - Admin device: edits the local state and publishes it to Firestore.
+ * - Spectator devices: read the live state from Firestore (read-only UI).
+ * - `game_logs` keeps an append-only history of every finished game.
+ */
+let liveListenerAttached = false;
 
 export const useTournamentStore = create(
   persist(
-    (set) => ({
-      tournaments: [],
-      activeTournamentId: null,
+    (set, get) => {
+      const syncById = (tournamentId) => {
+        const tournament = get().tournaments.find((t) => t.id === tournamentId);
+        if (tournament) {
+          syncTournament(tournament).catch((err) =>
+            console.error("Firestore sync failed:", err),
+          );
+        }
+      };
 
-      createTournament: ({ name, category, format, pointSystem, seeding }) => {
-        const id = uid("t");
-        const tournament = {
-          id,
-          name: name?.trim() || "Untitled Tournament",
-          category, // "singles" | "doubles"
-          format, // "round-robin" | "bracket"
-          pointSystem: Number(pointSystem), // 15 | 21
-          seeding: format === "bracket" ? seeding ?? "auto" : null,
-          participants: [],
-          matches: [],
-          status: "setup", // setup | active | complete
-          createdAt: new Date().toISOString(),
-        };
-        set((state) => ({
-          tournaments: [tournament, ...state.tournaments],
-          activeTournamentId: id,
-        }));
-        return id;
-      },
+      return {
+        tournaments: [],
+        activeTournamentId: null,
 
-      deleteTournament: (tournamentId) => {
-        set((state) => ({
-          tournaments: state.tournaments.filter((t) => t.id !== tournamentId),
-          activeTournamentId:
-            state.activeTournamentId === tournamentId
-              ? null
-              : state.activeTournamentId,
-        }));
-      },
+        /**
+         * Subscribe to the live tournament state in Firestore. Updates stream
+         * in automatically for spectators (and other admins) as scores change.
+         */
+        subscribeTournaments: () => {
+          if (liveListenerAttached) return;
+          liveListenerAttached = true;
 
-      addParticipant: (tournamentId, participant) => {
-        const record = {
-          ...participant,
-          id: uid("p"),
-        };
-        set((state) => ({
-          tournaments: state.tournaments.map((t) =>
-            t.id === tournamentId
-              ? { ...t, participants: [...t.participants, record] }
-              : t,
-          ),
-        }));
-        return record;
-      },
+          const q = query(
+            collection(db, "tournaments"),
+            orderBy("createdAt", "desc"),
+          );
+          onSnapshot(
+            q,
+            (snap) => {
+              const tournaments = snap.docs.map((d) =>
+                mapRow({ id: d.id, ...d.data() }),
+              );
+              set({
+                tournaments,
+                activeTournamentId: tournaments[0]?.id ?? null,
+              });
+            },
+            (err) => {
+              console.error("Failed to load tournaments:", err);
+            },
+          );
+        },
 
-      removeParticipant: (tournamentId, participantId) => {
-        set((state) => ({
-          tournaments: state.tournaments.map((t) =>
-            t.id === tournamentId
-              ? {
-                  ...t,
-                  participants: t.participants.filter(
-                    (p) => p.id !== participantId,
-                  ),
-                }
-              : t,
-          ),
-        }));
-      },
+        createTournament: ({
+          name,
+          category,
+          format,
+          pointSystem,
+          seeding,
+          participants = [],
+        }) => {
+          const id = uid("t");
+          const now = new Date();
 
-      generateMatches: (tournamentId) => {
-        set((state) => ({
-          tournaments: state.tournaments.map((t) => {
-            if (t.id !== tournamentId) return t;
+          // Auto-name from the current date + time the tournament took place.
+          const label = category === "doubles" ? "Doubles" : "Singles";
+          const stamp = now.toLocaleString(undefined, {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          });
+          const autoName = `${label} · ${stamp}`;
 
-            let matches;
-            if (t.format === "round-robin") {
-              matches = generateRoundRobinMatches(t.participants).map((m) => ({
-                ...m,
-                scoreA: null,
-                scoreB: null,
-                winnerId: null,
-                status: "scheduled",
-                isBye: false,
-              }));
+          const records = participants.map((p) => ({ ...p, id: uid("p") }));
+
+          const tournament = {
+            id,
+            name: name?.trim() || autoName,
+            category,
+            format,
+            pointSystem: Number(pointSystem),
+            seeding: format === "bracket" ? seeding ?? "auto" : null,
+            participants: records,
+            matches: [],
+            status: records.length >= 2 ? "active" : "setup",
+            createdAt: now.toISOString(),
+          };
+
+          if (records.length >= 2) {
+            if (format === "round-robin") {
+              tournament.matches = generateRoundRobinMatches(records).map(
+                (m) => ({
+                  ...m,
+                  scoreA: null,
+                  scoreB: null,
+                  winnerId: null,
+                  status: "scheduled",
+                  isBye: false,
+                }),
+              );
             } else {
-              matches = generateBracket(t.participants, t.seeding).matches;
+              tournament.matches = generateBracket(
+                records,
+                tournament.seeding,
+              ).matches;
             }
+          }
 
-            return { ...t, matches, status: "active" };
-          }),
-        }));
-      },
+          set((state) => ({
+            tournaments: [tournament, ...state.tournaments],
+            activeTournamentId: id,
+          }));
 
-      saveScore: (tournamentId, matchId, scoreA, scoreB) => {
-        set((state) => ({
-          tournaments: state.tournaments.map((t) => {
-            if (t.id !== tournamentId) return t;
+          syncTournament(tournament).catch((err) =>
+            console.error("Firestore sync failed:", err),
+          );
 
-            const matches = t.matches.map((m) => {
-              if (m.id !== matchId) return m;
+          return id;
+        },
+
+        deleteTournament: (tournamentId) => {
+          set((state) => ({
+            tournaments: state.tournaments.filter((t) => t.id !== tournamentId),
+            activeTournamentId:
+              state.activeTournamentId === tournamentId
+                ? null
+                : state.activeTournamentId,
+          }));
+
+          deleteDoc(doc(db, "tournaments", tournamentId)).catch((err) =>
+            console.error("Firestore delete failed:", err),
+          );
+        },
+
+        addParticipant: (tournamentId, participant) => {
+          const record = { ...participant, id: uid("p") };
+          set((state) => ({
+            tournaments: state.tournaments.map((t) =>
+              t.id === tournamentId
+                ? { ...t, participants: [...t.participants, record] }
+                : t,
+            ),
+          }));
+          syncById(tournamentId);
+          return record;
+        },
+
+        addParticipants: (tournamentId, participants) => {
+          const records = participants.map((p) => ({ ...p, id: uid("p") }));
+          set((state) => ({
+            tournaments: state.tournaments.map((t) =>
+              t.id === tournamentId
+                ? { ...t, participants: [...t.participants, ...records] }
+                : t,
+            ),
+          }));
+          syncById(tournamentId);
+          return records;
+        },
+
+        removeParticipant: (tournamentId, participantId) => {
+          set((state) => ({
+            tournaments: state.tournaments.map((t) =>
+              t.id === tournamentId
+                ? {
+                    ...t,
+                    participants: t.participants.filter(
+                      (p) => p.id !== participantId,
+                    ),
+                  }
+                : t,
+            ),
+          }));
+          syncById(tournamentId);
+        },
+
+        generateMatches: (tournamentId) => {
+          set((state) => ({
+            tournaments: state.tournaments.map((t) => {
+              if (t.id !== tournamentId) return t;
+
+              let matches;
+              if (t.format === "round-robin") {
+                matches = generateRoundRobinMatches(t.participants).map((m) => ({
+                  ...m,
+                  scoreA: null,
+                  scoreB: null,
+                  winnerId: null,
+                  status: "scheduled",
+                  isBye: false,
+                }));
+              } else {
+                matches = generateBracket(t.participants, t.seeding).matches;
+              }
+
+              return { ...t, matches, status: "active" };
+            }),
+          }));
+          syncById(tournamentId);
+        },
+
+        incrementScore: (tournamentId, matchId, side, delta) => {
+          const tournament = get().tournaments.find((t) => t.id === tournamentId);
+          if (!tournament) return;
+
+          let logEntry = null;
+          let nextTournament;
+
+          if (tournament.format === "round-robin") {
+            const matches = tournament.matches.map((m) => {
+              if (m.id !== matchId || m.status === "bye" || m.status === "completed") {
+                return m;
+              }
+              const scoreA = Math.max(0, (m.scoreA ?? 0) + (side === "A" ? delta : 0));
+              const scoreB = Math.max(0, (m.scoreB ?? 0) + (side === "B" ? delta : 0));
               const { status, winnerId } = resolveScoreState(
                 scoreA,
                 scoreB,
                 m.participantAId,
                 m.participantBId,
-                t.pointSystem,
+                tournament.pointSystem,
               );
-              return { ...m, scoreA, scoreB, status, winnerId };
+              const next = { ...m, scoreA, scoreB, status, winnerId };
+              if (status === "completed") {
+                logEntry = { match: next, scoreA, scoreB };
+              }
+              return next;
             });
-
-            const resolved =
-              t.format === "bracket" ? refreshBracket(matches) : matches;
-
-            return { ...t, matches: resolved };
-          }),
-        }));
-      },
-
-      recordGame: (tournamentId, matchId, scoreA, scoreB) => {
-        set((state) => ({
-          tournaments: state.tournaments.map((t) => {
-            if (t.id !== tournamentId || t.format !== "bracket") return t;
-
-            const matches = t.matches.map((m) => {
+            nextTournament = { ...tournament, matches };
+          } else {
+            const matches = tournament.matches.map((m) => {
               if (m.id !== matchId || m.status === "bye" || m.status === "completed") {
                 return m;
               }
-              const games = [
-                ...(Array.isArray(m.games) ? m.games : []),
-                { id: uid("g"), scoreA, scoreB },
-              ];
-              const { status, winnerId } = resolveSeries({ ...m, games });
-              return { ...m, games, status, winnerId };
+              const live = m.live ?? { scoreA: 0, scoreB: 0 };
+              const scoreA = Math.max(0, (live.scoreA ?? 0) + (side === "A" ? delta : 0));
+              const scoreB = Math.max(0, (live.scoreB ?? 0) + (side === "B" ? delta : 0));
+
+              if (isValidFinishedScore(scoreA, scoreB, tournament.pointSystem)) {
+                const games = [
+                  ...(Array.isArray(m.games) ? m.games : []),
+                  { id: uid("g"), scoreA, scoreB },
+                ];
+                const { status, winnerId, seriesScoreA, seriesScoreB } = resolveSeries({
+                  ...m,
+                  games,
+                });
+                const nextLive = status === "completed" ? null : { scoreA: 0, scoreB: 0 };
+                const next = { ...m, games, live: nextLive, status, winnerId };
+                logEntry = {
+                  match: next,
+                  scoreA,
+                  scoreB,
+                  gameNumber: games.length,
+                  seriesScoreA,
+                  seriesScoreB,
+                };
+                return next;
+              }
+
+              return { ...m, live: { scoreA, scoreB }, status: "live" };
             });
+            nextTournament = { ...tournament, matches: refreshBracket(matches) };
+          }
 
-            return { ...t, matches: refreshBracket(matches) };
-          }),
-        }));
-      },
+          set((state) => ({
+            tournaments: state.tournaments.map((t) =>
+              t.id === tournamentId ? nextTournament : t,
+            ),
+          }));
 
-      undoGame: (tournamentId, matchId) => {
-        set((state) => ({
-          tournaments: state.tournaments.map((t) => {
-            if (t.id !== tournamentId || t.format !== "bracket") return t;
+          syncTournament(nextTournament).catch((err) =>
+            console.error("Firestore sync failed:", err),
+          );
 
-            const matches = t.matches.map((m) => {
-              if (m.id !== matchId || m.status === "bye") return m;
-              const games = Array.isArray(m.games)
-                ? m.games.slice(0, -1)
-                : [];
-              const { status, winnerId } = resolveSeries({ ...m, games });
-              return { ...m, games, status, winnerId };
+          if (logEntry) {
+            logGameResult({
+              tournament: nextTournament,
+              match: logEntry.match,
+              scoreA: logEntry.scoreA,
+              scoreB: logEntry.scoreB,
+              gameNumber: logEntry.gameNumber ?? null,
+              seriesScoreA: logEntry.seriesScoreA ?? null,
+              seriesScoreB: logEntry.seriesScoreB ?? null,
             });
+          }
+        },
 
-            return { ...t, matches: refreshBracket(matches) };
-          }),
-        }));
-      },
+        undoGame: (tournamentId, matchId) => {
+          set((state) => ({
+            tournaments: state.tournaments.map((t) => {
+              if (t.id !== tournamentId || t.format !== "bracket") return t;
 
-      reopenMatch: (tournamentId, matchId) => {
-        set((state) => ({
-          tournaments: state.tournaments.map((t) => {
-            if (t.id !== tournamentId) return t;
+              const matches = t.matches.map((m) => {
+                if (m.id !== matchId || m.status === "bye") return m;
+                const games = Array.isArray(m.games)
+                  ? m.games.slice(0, -1)
+                  : [];
+                const { status, winnerId } = resolveSeries({ ...m, games });
+                return { ...m, games, live: null, status, winnerId };
+              });
 
-            const matches = t.matches.map((m) => {
-              if (m.id !== matchId) return m;
-              if (t.format === "bracket") {
+              return { ...t, matches: refreshBracket(matches) };
+            }),
+          }));
+          syncById(tournamentId);
+        },
+
+        reopenMatch: (tournamentId, matchId) => {
+          set((state) => ({
+            tournaments: state.tournaments.map((t) => {
+              if (t.id !== tournamentId) return t;
+
+              const matches = t.matches.map((m) => {
+                if (m.id !== matchId) return m;
+                if (t.format === "bracket") {
+                  return {
+                    ...m,
+                    games: [],
+                    live: null,
+                    winnerId: null,
+                    status: "scheduled",
+                  };
+                }
                 return {
                   ...m,
-                  games: [],
+                  scoreA: null,
+                  scoreB: null,
                   winnerId: null,
                   status: "scheduled",
                 };
-              }
-              return {
-                ...m,
-                scoreA: null,
-                scoreB: null,
-                winnerId: null,
-                status: "scheduled",
-              };
-            });
+              });
 
-            const resolved =
-              t.format === "bracket" ? refreshBracket(matches) : matches;
+              const resolved =
+                t.format === "bracket" ? refreshBracket(matches) : matches;
 
-            return { ...t, matches: resolved };
-          }),
-        }));
-      },
-    }),
+              return { ...t, matches: resolved };
+            }),
+          }));
+          syncById(tournamentId);
+        },
+      };
+    },
     {
       name: "atsi-racketeers-tournaments",
-      version: 2,
+      version: 3,
       migrate: (persistedState) => {
         const state = persistedState ?? {};
         const tournaments = (state.tournaments ?? []).map((t) => {
           if (t.format !== "bracket") return t;
-          const matches = (t.matches ?? []).map((m) => {
-            if (Array.isArray(m.games)) return m;
-            const isBye = m.status === "bye";
-            return {
-              ...m,
-              games: [],
-              gamesToWin: m.roundName === "Final" ? 3 : 2,
-              status: isBye ? "bye" : "scheduled",
-              winnerId: isBye ? m.winnerId : null,
-            };
-          });
+          const matches = (t.matches ?? []).map((m) => ({
+            ...m,
+            games: Array.isArray(m.games) ? m.games : [],
+            gamesToWin: m.gamesToWin ?? (m.roundName === "Final" ? 3 : 2),
+            live: m.live ?? null,
+            status: m.status ?? "scheduled",
+            winnerId: m.winnerId ?? null,
+          }));
           return { ...t, matches };
         });
         return { ...state, tournaments };

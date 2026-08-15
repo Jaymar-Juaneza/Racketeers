@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Users collection — one doc per admin account (id = auth uid).
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Live tournament state — readable by everyone, writable by admins only.
+    match /tournaments/{tournamentId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Game history — permanent append-only log of finished games.
+    match /game_logs/{logId} {
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+  }
+}

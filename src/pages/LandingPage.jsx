@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, CalendarDays, Trash2, User, Users } from "lucide-react";
+import { ArrowRight, CalendarDays, Plus, Trash2 } from "lucide-react";
 import { useTournamentStore } from "../store/tournamentStore.js";
+import { useAuthStore } from "../store/authStore.js";
 import { Badge } from "../components/ui/badge.jsx";
 import { Button } from "../components/ui/button.jsx";
 import {
@@ -24,48 +25,45 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const tournaments = useTournamentStore((s) => s.tournaments);
   const deleteTournament = useTournamentStore((s) => s.deleteTournament);
+  const isAdmin = useAuthStore((s) => s.profile?.role === "admin");
 
   return (
     <div className="flex flex-col gap-10">
       {/* Hero */}
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary-dark to-secondary px-6 py-14 text-white sm:px-12 sm:py-20">
-        <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
-        <div className="absolute -bottom-20 -left-10 h-72 w-72 rounded-full bg-blue-400/20 blur-3xl" />
+      <section className="animate-rise relative overflow-hidden rounded-lg border border-line bg-gradient-to-br from-mist via-white to-mist-deep/60 px-6 py-14 text-ink shadow-panel sm:px-12 sm:py-20">
+        <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-secondary/20 blur-2xl" />
+        <div className="absolute -bottom-20 -left-10 h-72 w-72 rounded-full bg-primary/10 blur-3xl" />
 
         <div className="relative max-w-2xl">
-          <p className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-blue-50">
+          <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1 font-mono text-xs font-medium uppercase tracking-wider text-primary">
             <CalendarDays className="h-3.5 w-3.5" />
             Tournament Manager
           </p>
-          <h1 className="text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl">
-            ATSI <span className="text-red-300">Racketeers</span>
+          <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
+            ATSI <span className="text-secondary-dark">Racketeers</span>
           </h1>
-          <p className="mt-4 max-w-xl text-lg text-blue-100">
-            Organize Singles and Doubles badminton competitions. Generate
-            fixtures automatically, record scores, and crown champions — all in
-            one place.
+          <p className="mt-4 max-w-xl text-lg text-muted">
+            Paste your players once and get the matchmaking instantly — for
+            Singles and Doubles badminton competitions.
           </p>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Button
-              variant="secondary"
-              size="lg"
-              className="bg-white text-primary hover:bg-light sm:min-w-40"
-              onClick={() => navigate("/setup/singles")}
-            >
-              <User className="h-5 w-5" />
-              Start Singles
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-            <Button
-              size="lg"
-              className="border border-white/40 bg-white/10 text-white hover:bg-white/20 sm:min-w-40"
-              onClick={() => navigate("/setup/doubles")}
-            >
-              <Users className="h-5 w-5" />
-              Start Doubles
-              <ArrowRight className="h-4 w-4" />
-            </Button>
+          <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
+            {isAdmin ? (
+              <Button
+                size="lg"
+                className="sm:min-w-52"
+                onClick={() => navigate("/new")}
+              >
+                <Plus className="h-5 w-5" />
+                New Tournament
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            ) : (
+              <p className="text-sm font-medium text-muted">
+                Spectators can view live scores and standings without signing
+                in.
+              </p>
+            )}
           </div>
         </div>
       </section>
@@ -73,11 +71,11 @@ export default function LandingPage() {
       {/* Existing tournaments */}
       <section>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+          <h2 className="text-2xl font-bold tracking-tight text-ink">
             Your Tournaments
           </h2>
           {tournaments.length > 0 && (
-            <span className="text-sm font-medium text-slate-500">
+            <span className="font-mono text-sm font-medium text-muted">
               {tournaments.length} total
             </span>
           )}
@@ -89,12 +87,13 @@ export default function LandingPage() {
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-light">
                 <CalendarDays className="h-7 w-7 text-primary" />
               </div>
-              <p className="text-lg font-semibold text-slate-700">
+              <p className="text-lg font-semibold text-ink">
                 No tournaments yet
               </p>
-              <p className="max-w-sm text-sm text-slate-500">
-                Create your first competition with the Singles or Doubles
-                buttons above.
+              <p className="max-w-sm text-sm text-muted">
+                {isAdmin
+                  ? "Create your first competition with the New Tournament button above."
+                  : "No tournaments have been created yet — check back later."}
               </p>
             </CardContent>
           </Card>
@@ -110,22 +109,24 @@ export default function LandingPage() {
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-2">
                       <CardTitle className="line-clamp-1">{t.name}</CardTitle>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              `Delete "${t.name}"? This cannot be undone.`,
-                            )
-                          ) {
-                            deleteTournament(t.id);
-                          }
-                        }}
-                        className="rounded-md p-1 text-slate-400 hover:bg-red-50 hover:text-accent"
-                        aria-label="Delete tournament"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Delete "${t.name}"? This cannot be undone.`,
+                              )
+                            ) {
+                              deleteTournament(t.id);
+                            }
+                          }}
+                          className="rounded-md p-1 text-muted/70 hover:bg-red-50 hover:text-accent"
+                          aria-label="Delete tournament"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       <Badge variant="blue">{categoryLabel[t.category]}</Badge>
@@ -134,7 +135,7 @@ export default function LandingPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="flex-1 pb-3">
-                    <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-500">
+                    <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted">
                       <span>
                         {t.participants.length}{" "}
                         {t.category === "doubles" ? "teams" : "players"}

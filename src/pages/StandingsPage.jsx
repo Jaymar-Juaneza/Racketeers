@@ -32,10 +32,10 @@ export default function StandingsPage() {
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <p className="text-lg font-semibold text-slate-700">
+          <p className="text-lg font-semibold text-ink">
             Tournament not found
           </p>
-          <Button variant="outline" className="mt-4" onClick={() => navigate("/home")}>
+          <Button variant="outline" className="mt-4" onClick={() => navigate("/")}>
             Back to home
           </Button>
         </CardContent>
@@ -47,7 +47,7 @@ export default function StandingsPage() {
     <div className="flex flex-col gap-6">
       <Link
         to={`/tournament/${tournament.id}`}
-        className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-primary"
+        className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-primary"
       >
         <ArrowLeft className="h-4 w-4" />
         Dashboard
@@ -56,10 +56,10 @@ export default function StandingsPage() {
       <TournamentNav tournament={tournament} />
 
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+        <h2 className="text-2xl font-bold tracking-tight text-ink">
           Standings
         </h2>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm text-muted">
           Ranked by wins, head-to-head, point difference, then points scored.
         </p>
       </div>
@@ -72,7 +72,7 @@ export default function StandingsPage() {
           <div className="scroll-area overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm">
               <thead>
-                <tr className="border-y border-slate-100 bg-light/50 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+                <tr className="border-y border-line bg-light/50 text-left text-xs font-bold uppercase tracking-wide text-muted">
                   <th className="px-5 py-3">#</th>
                   <th className="px-5 py-3">
                     {tournament.category === "doubles" ? "Team" : "Player"}
@@ -94,7 +94,7 @@ export default function StandingsPage() {
                     <tr
                       key={row.participantId}
                       className={cn(
-                        "border-b border-slate-50 last:border-0",
+                        "border-b border-line last:border-0",
                         isLeader && "bg-amber-50/60",
                       )}
                     >
@@ -104,7 +104,7 @@ export default function StandingsPage() {
                             "inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-extrabold",
                             isLeader
                               ? "bg-primary text-white"
-                              : "bg-slate-100 text-slate-600",
+                              : "bg-mist text-muted",
                           )}
                         >
                           {row.rank}
@@ -112,7 +112,7 @@ export default function StandingsPage() {
                       </td>
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-800">
+                          <span className="font-semibold text-ink">
                             {displayName(participant)}
                           </span>
                           {isLeader && (
@@ -120,21 +120,21 @@ export default function StandingsPage() {
                           )}
                         </div>
                         {participant?.type === "team" && (
-                          <p className="text-xs text-slate-500">
+                          <p className="text-xs text-muted">
                             {participant.player1} & {participant.player2}
                           </p>
                         )}
                       </td>
-                      <td className="px-3 py-3 text-center font-bold text-slate-700">
+                      <td className="px-3 py-3 text-center font-bold text-ink">
                         {row.wins}
                       </td>
-                      <td className="px-3 py-3 text-center text-slate-500">
+                      <td className="px-3 py-3 text-center text-muted">
                         {row.losses}
                       </td>
-                      <td className="px-3 py-3 text-center text-slate-700">
+                      <td className="px-3 py-3 text-center text-ink">
                         {row.pointsFor}
                       </td>
-                      <td className="px-3 py-3 text-center text-slate-500">
+                      <td className="px-3 py-3 text-center text-muted">
                         {row.pointsAgainst}
                       </td>
                       <td className="px-5 py-3 text-center">

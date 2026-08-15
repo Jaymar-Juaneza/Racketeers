@@ -17,7 +17,7 @@ export default function TournamentNav({ tournament }) {
   }
 
   return (
-    <nav className="scroll-area flex gap-1 overflow-x-auto rounded-xl border border-blue-100 bg-white p-1">
+    <nav className="scroll-area flex gap-1 overflow-x-auto rounded-lg border border-line bg-white p-1 shadow-panel">
       {tabs.map((tab) => (
         <NavLink
           key={tab.to}
@@ -25,10 +25,10 @@ export default function TournamentNav({ tournament }) {
           end={tab.end}
           className={({ isActive }) =>
             cn(
-              "inline-flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors",
+              "inline-flex shrink-0 items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-colors",
               isActive
-                ? "bg-primary text-white shadow-sm"
-                : "text-slate-600 hover:bg-light hover:text-primary",
+                ? "bg-primary text-white shadow-glow"
+                : "text-muted hover:bg-mist hover:text-primary",
             )
           }
         >

@@ -16,8 +16,8 @@ import {
   useTournamentStore,
 } from "../store/tournamentStore.js";
 import { computeStandings } from "../lib/tournament/roundRobin.js";
-import { championOf } from "../lib/tournament/bracket.js";
 import { displayName } from "../lib/participants.js";
+import { cn } from "../lib/utils.js";
 import { Button } from "../components/ui/button.jsx";
 import { Badge } from "../components/ui/badge.jsx";
 import {
@@ -27,6 +27,7 @@ import {
   CardTitle,
 } from "../components/ui/card.jsx";
 import TournamentNav from "../components/TournamentNav.jsx";
+import { useAuthStore } from "../store/authStore.js";
 
 function StatCard({ icon, label, value, sub }) {
   return (
@@ -36,14 +37,49 @@ function StatCard({ icon, label, value, sub }) {
           {icon}
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">
             {label}
           </p>
-          <p className="text-2xl font-extrabold text-slate-900">{value}</p>
-          {sub && <p className="text-xs text-slate-500">{sub}</p>}
+          <p className="text-2xl font-extrabold text-ink">{value}</p>
+          {sub && <p className="text-xs text-muted">{sub}</p>}
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function PlaceRow({ rank, participants }) {
+  const tied = participants.length > 1;
+  return (
+    <div className="flex items-start gap-4">
+      <div
+        className={cn(
+          "flex shrink-0 items-center justify-center rounded-full font-extrabold",
+          rank === 1
+            ? "h-14 w-14 bg-primary text-xl text-white"
+            : "h-11 w-11 bg-mist text-lg text-muted",
+        )}
+      >
+        {rank}
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+          {rank === 1 ? "1st place" : rank === 2 ? "2nd place" : "3rd place"}
+        </p>
+        {participants.map((p) => (
+          <p
+            key={p.id}
+            className={cn(
+              "font-bold text-ink",
+              rank === 1 ? "text-xl" : "text-lg",
+            )}
+          >
+            {displayName(p)}
+          </p>
+        ))}
+        {tied && <p className="text-xs font-medium text-muted">tied</p>}
+      </div>
+    </div>
   );
 }
 
@@ -51,6 +87,7 @@ export default function DashboardPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const tournament = useTournamentStore((s) => selectTournament(s, id));
+  const isAdmin = useAuthStore((s) => s.profile?.role === "admin");
 
   const stats = useMemo(() => {
     if (!tournament) return null;
@@ -77,19 +114,67 @@ export default function DashboardPage() {
       currentRound = match?.roundName ?? `Round ${r}`;
     }
 
-    let leader = null;
+    const isComplete =
+      playable.length > 0 && remaining.length === 0;
+
     let leaderLabel = "Tournament Leader";
+    const podium = [];
+    let hasWinner = false;
+
     if (tournament.format === "round-robin") {
       const standings = computeStandings(
         tournament.participants,
         tournament.matches,
       );
-      leader = standings[0] ?? null;
+      if (isComplete && standings.length > 0) {
+        hasWinner = true;
+        for (let i = 0; i < Math.min(3, standings.length); i += 1) {
+          const participant = tournament.participants.find(
+            (p) => p.id === standings[i].participantId,
+          );
+          if (participant) {
+            podium.push({ rank: i + 1, participants: [participant] });
+          }
+        }
+      }
     } else {
-      const champId = championOf(tournament.matches);
       leaderLabel = "Champion";
+      const finalMatch = tournament.matches.find(
+        (m) => m.roundName === "Final" && m.status === "completed",
+      );
+      const champId = finalMatch?.winnerId ?? null;
       if (champId) {
-        leader = tournament.participants.find((p) => p.id === champId) ?? null;
+        hasWinner = true;
+        const champion =
+          tournament.participants.find((p) => p.id === champId) ?? null;
+        if (champion) podium.push({ rank: 1, participants: [champion] });
+
+        const runnerUpId =
+          finalMatch.winnerId === finalMatch.participantAId
+            ? finalMatch.participantBId
+            : finalMatch.participantAId;
+        const runnerUp = runnerUpId
+          ? tournament.participants.find((p) => p.id === runnerUpId) ?? null
+          : null;
+        if (runnerUp) podium.push({ rank: 2, participants: [runnerUp] });
+
+        const semifinalLosers = tournament.matches
+          .filter(
+            (m) => m.roundName === "Semifinals" && m.status === "completed",
+          )
+          .map((m) => {
+            const loserId =
+              m.winnerId === m.participantAId
+                ? m.participantBId
+                : m.participantAId;
+            return (
+              tournament.participants.find((p) => p.id === loserId) ?? null
+            );
+          })
+          .filter(Boolean);
+        if (semifinalLosers.length > 0) {
+          podium.push({ rank: 3, participants: semifinalLosers });
+        }
       }
     }
 
@@ -98,10 +183,10 @@ export default function DashboardPage() {
       completed: completed.length,
       remaining: remaining.length,
       currentRound,
-      leader,
+      podium,
+      hasWinner,
       leaderLabel,
-      isComplete:
-        playable.length > 0 && remaining.length === 0,
+      isComplete,
     };
   }, [tournament]);
 
@@ -109,10 +194,10 @@ export default function DashboardPage() {
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <p className="text-lg font-semibold text-slate-700">
+          <p className="text-lg font-semibold text-ink">
             Tournament not found
           </p>
-          <Button variant="outline" className="mt-4" onClick={() => navigate("/home")}>
+          <Button variant="outline" className="mt-4" onClick={() => navigate("/")}>
             Back to home
           </Button>
         </CardContent>
@@ -124,15 +209,15 @@ export default function DashboardPage() {
     <div className="flex flex-col gap-6">
       <div>
         <Link
-          to="/home"
-          className="mb-2 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-primary"
+          to="/"
+          className="mb-2 inline-flex items-center gap-1.5 text-sm font-semibold text-muted hover:text-primary"
         >
           <ArrowLeft className="h-4 w-4" />
           All tournaments
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
+            <h1 className="text-3xl font-extrabold tracking-tight text-ink">
               {tournament.name}
             </h1>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -151,17 +236,27 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {tournament.status === "setup" ? (
-            <Button onClick={() => navigate(`/tournament/${tournament.id}/participants`)}>
-              Add participants
-            </Button>
+          {isAdmin ? (
+            tournament.status === "setup" ? (
+              <Button onClick={() => navigate(`/tournament/${tournament.id}/participants`)}>
+                Add participants
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => navigate(`/tournament/${tournament.id}/matches`)}
+              >
+                <ListChecks className="h-4 w-4" />
+                Manage scores
+              </Button>
+            )
           ) : (
             <Button
               variant="outline"
               onClick={() => navigate(`/tournament/${tournament.id}/matches`)}
             >
               <ListChecks className="h-4 w-4" />
-              Manage scores
+              View matches
             </Button>
           )}
         </div>
@@ -217,28 +312,24 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {stats.leader ? (
-              <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-xl font-extrabold text-white">
-                  {stats.leader.rank ?? 1}
-                </div>
-                <div>
-                  <p className="text-xl font-bold text-slate-900">
-                    {displayName(stats.leader)}
-                  </p>
-                  {stats.leader.type === "team" && (
-                    <p className="text-sm text-slate-500">
-                      {stats.leader.player1} & {stats.leader.player2}
-                    </p>
-                  )}
-                </div>
+            {stats.hasWinner ? (
+              <div className="flex flex-col gap-4">
+                {stats.podium.map((entry, index) => (
+                  <div
+                    key={entry.rank}
+                    className={cn(index > 0 && "border-t border-line pt-4")}
+                  >
+                    <PlaceRow rank={entry.rank} participants={entry.participants} />
+                  </div>
+                ))}
               </div>
             ) : (
-              <p className="py-6 text-center text-sm text-slate-500">
-                {tournament.format === "round-robin"
-                  ? "No completed matches yet — the leader appears once scores are recorded."
-                  : "No champion yet — the bracket winner will appear here."}
-              </p>
+              <div className="flex items-center justify-center gap-3 py-6">
+                <RotateCcw className="h-5 w-5 text-muted" />
+                <p className="text-sm font-semibold text-muted">
+                  Match in progress
+                </p>
+              </div>
             )}
           </CardContent>
         </Card>

@@ -1,57 +1,85 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, EyeOff, LockKeyhole } from "lucide-react";
+import { Eye, EyeOff, LockKeyhole, LogIn } from "lucide-react";
 import { Logo } from "../components/Logo.jsx";
 import { Button } from "../components/ui/button.jsx";
 import { Input } from "../components/ui/input.jsx";
 import { Label } from "../components/ui/label.jsx";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card.jsx";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card.jsx";
 import { useAuthStore } from "../store/authStore.js";
 
 export default function LoginPage() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const loading = useAuthStore((s) => s.loading);
   const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
 
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated) navigate("/home", { replace: true });
-  }, [isAuthenticated, navigate]);
+    if (!loading && isAuthenticated) navigate("/", { replace: true });
+  }, [loading, isAuthenticated, navigate]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (login(password)) {
-      navigate("/home", { replace: true });
+    setError("");
+    setSubmitting(true);
+    const res = await login(username, password);
+    setSubmitting(false);
+    if (!res.ok) {
+      setError(res.error ?? "Login failed.");
     } else {
-      setError("Incorrect password. Please try again.");
-      setPassword("");
+      navigate("/", { replace: true });
     }
   };
 
+  if (loading) return null;
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-primary via-primary-dark to-secondary px-4 py-10">
+    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="rounded-2xl bg-white p-3 shadow-lg">
+          <div className="rounded-lg bg-white p-3 shadow-panel">
             <Logo markClassName="h-12 w-12" />
           </div>
-          <p className="mt-4 text-sm font-medium text-blue-100">
-            Organizer access required to manage tournaments
+          <p className="mt-4 text-sm font-medium text-muted">
+            Sign in as an admin to manage tournaments and record scores.
           </p>
         </div>
 
-        <Card className="w-full">
+        <Card className="animate-rise w-full">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <LockKeyhole className="h-5 w-5 text-primary" />
-              Organizer Login
+              Admin sign in
             </CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="username">Username</Label>
+                <Input
+                  id="username"
+                  value={username}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    setError("");
+                  }}
+                  placeholder="e.g. admin"
+                  autoFocus
+                  autoComplete="username"
+                />
+              </div>
+
               <div className="flex flex-col gap-2">
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
@@ -63,33 +91,44 @@ export default function LoginPage() {
                       setPassword(e.target.value);
                       setError("");
                     }}
-                    placeholder="Enter organizer password"
-                    autoFocus
+                    placeholder="Enter password"
+                    autoComplete="current-password"
                     className="pr-10"
                   />
                   <button
                     type="button"
                     onClick={() => setShow((s) => !s)}
-                    className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-slate-400 hover:text-slate-600"
+                    className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted hover:text-ink"
                     aria-label={show ? "Hide password" : "Show password"}
                   >
-                    {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {show ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
-                {error && (
-                  <p className="text-sm font-medium text-accent">{error}</p>
-                )}
               </div>
 
-              <Button type="submit" size="lg" className="w-full">
-                Log in
+              {error && (
+                <p className="text-sm font-medium text-accent">{error}</p>
+              )}
+
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full"
+                disabled={submitting}
+              >
+                <LogIn className="h-4 w-4" />
+                {submitting ? "Signing in…" : "Sign in"}
               </Button>
             </form>
           </CardContent>
         </Card>
 
-        <p className="mt-6 text-center text-xs text-blue-100/80">
-          Single shared organizer password · session-only access
+        <p className="mt-6 text-center font-mono text-xs text-muted/80">
+          Admin only · spectators can view without signing in
         </p>
       </div>
     </div>

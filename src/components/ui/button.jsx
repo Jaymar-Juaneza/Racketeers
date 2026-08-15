@@ -2,12 +2,12 @@ import { cn } from "../../lib/utils.js";
 
 const variants = {
   default:
-    "bg-primary text-white hover:bg-primary-dark focus-visible:ring-primary/40 shadow-sm",
+    "bg-primary text-white hover:bg-primary-dark hover:-translate-y-0.5 focus-visible:ring-primary/40 shadow-glow",
   secondary:
-    "bg-secondary text-white hover:bg-blue-700 focus-visible:ring-secondary/40 shadow-sm",
+    "rounded-full border border-secondary/70 bg-white text-secondary-dark hover:border-secondary hover:bg-secondary hover:text-white focus-visible:ring-secondary/40",
   outline:
-    "border border-primary/40 bg-white text-primary hover:bg-light focus-visible:ring-primary/30",
-  ghost: "bg-transparent text-primary hover:bg-light focus-visible:ring-primary/20",
+    "border border-line bg-white text-ink hover:border-primary/30 hover:bg-mist hover:text-primary focus-visible:ring-primary/30",
+  ghost: "bg-transparent text-primary hover:bg-mist focus-visible:ring-primary/20",
   danger:
     "bg-accent text-white hover:bg-red-700 focus-visible:ring-accent/40 shadow-sm",
   destructiveOutline:
@@ -32,7 +32,7 @@ export function Button({
     <button
       type={type}
       className={cn(
-        "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-semibold transition-colors",
+        "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-semibold transition-all",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
         "disabled:pointer-events-none disabled:opacity-50",
         "cursor-pointer select-none active:scale-[0.99]",
