@@ -43,7 +43,7 @@ function ScoreButton({ children, onClick, disabled, label }) {
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-line bg-white text-xl font-extrabold text-ink shadow-sm transition-all hover:border-primary/40 hover:bg-mist hover:text-primary active:scale-95 disabled:pointer-events-none disabled:opacity-40"
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-line bg-white text-lg font-extrabold text-ink shadow-sm transition-all hover:border-primary/40 hover:bg-mist hover:text-primary active:scale-95 disabled:pointer-events-none disabled:opacity-40 sm:h-12 sm:w-12 sm:text-xl"
     >
       {children}
     </button>
@@ -52,7 +52,7 @@ function ScoreButton({ children, onClick, disabled, label }) {
 
 function LiveScoreControl({ value, onIncrement, disabled = false, label }) {
   return (
-    <div className="flex items-center justify-center gap-2 sm:gap-3">
+    <div className="flex min-w-0 items-center justify-center gap-1 sm:gap-3">
       <ScoreButton
         onClick={() => onIncrement(-1)}
         disabled={disabled}
@@ -60,7 +60,7 @@ function LiveScoreControl({ value, onIncrement, disabled = false, label }) {
       >
         <Minus className="h-5 w-5" />
       </ScoreButton>
-      <span className="min-w-12 text-center text-3xl font-extrabold tabular-nums text-ink sm:text-4xl">
+      <span className="min-w-7 text-center text-2xl font-extrabold tabular-nums text-ink sm:min-w-12 sm:text-4xl">
         {value}
       </span>
       <ScoreButton
@@ -118,7 +118,7 @@ function MatchCard({
 
   return (
     <div className="rounded-xl border border-line bg-white p-4">
-      <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <Badge variant={statusVariant(match.status)}>
           {statusLabel(match.status)}
         </Badge>
@@ -134,7 +134,7 @@ function MatchCard({
         )}
       </div>
 
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
         <NameBlock participant={a} align="right" />
         <span className="text-xs font-extrabold uppercase text-muted/70">vs</span>
         <NameBlock participant={b} align="left" />
@@ -167,13 +167,13 @@ function MatchCard({
           <span>{match.scoreB}</span>
         </div>
       ) : (
-        <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-3">
           <LiveScoreControl
             value={scoreA}
             onIncrement={(d) => onIncrement(match.id, "A", d)}
             label={a ? displayName(a) : "TBD"}
           />
-          <span className="text-lg font-extrabold text-muted/40">–</span>
+          <span className="text-base font-extrabold text-muted/40 sm:text-lg">–</span>
           <LiveScoreControl
             value={scoreB}
             onIncrement={(d) => onIncrement(match.id, "B", d)}
@@ -253,7 +253,7 @@ function SeriesMatchCard({
         )}
       </div>
 
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
         <NameBlock participant={a} align="right" />
         <span className="text-xs font-extrabold uppercase text-muted/70">vs</span>
         <NameBlock participant={b} align="left" />
@@ -367,13 +367,13 @@ function SeriesMatchCard({
               <p className="text-center text-xs font-semibold text-muted">
                 Game {games.length + 1} · first to {tournament.pointSystem}, win by 2
               </p>
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-3">
                 <LiveScoreControl
                   value={liveScoreA}
                   onIncrement={(d) => onIncrement(match.id, "A", d)}
                   label={a ? displayName(a) : "TBD"}
                 />
-                <span className="text-lg font-extrabold text-muted/40">–</span>
+                <span className="text-base font-extrabold text-muted/40 sm:text-lg">–</span>
                 <LiveScoreControl
                   value={liveScoreB}
                   onIncrement={(d) => onIncrement(match.id, "B", d)}

@@ -30,10 +30,10 @@ export function Logo({ className, markClassName }) {
     <div className={cn("flex items-center gap-3", className)}>
       <ShuttlecockMark className={markClassName} />
       <div className="leading-tight">
-        <p className="text-xl font-extrabold tracking-tight text-primary">
+        <p className="text-lg font-extrabold tracking-tight text-primary sm:text-xl">
           ATSI <span className="text-secondary-dark">Racketeers</span>
         </p>
-        <p className="font-mono text-xs font-medium text-muted">
+        <p className="hidden font-mono text-xs font-medium text-muted sm:block">
           Badminton Tournament Manager
         </p>
       </div>

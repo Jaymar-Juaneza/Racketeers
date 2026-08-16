@@ -104,7 +104,7 @@ export default function ParticipantsPage() {
       </Link>
 
       <div className="mb-6">
-        <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+        <h1 className="text-2xl font-extrabold tracking-tight text-ink break-words sm:text-3xl">
           {tournament.name}
         </h1>
         <p className="mt-1 text-sm text-muted">

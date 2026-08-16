@@ -217,7 +217,7 @@ export default function DashboardPage() {
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+            <h1 className="text-2xl font-extrabold tracking-tight text-ink break-words sm:text-3xl">
               {tournament.name}
             </h1>
             <div className="mt-1.5 flex flex-wrap gap-1.5">

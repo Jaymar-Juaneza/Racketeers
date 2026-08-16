@@ -194,6 +194,10 @@ export default function BracketPage() {
         )}
       </div>
 
+      <p className="text-center text-xs font-medium text-muted sm:hidden">
+        Swipe left or right to see the full bracket
+      </p>
+
       <div className="scroll-area overflow-x-auto rounded-lg border border-line bg-gradient-to-b from-light/40 to-white p-4">
         <div className="flex min-w-max items-stretch gap-6">
           {rounds.map((roundMatches, ri) => (

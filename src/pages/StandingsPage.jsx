@@ -62,6 +62,9 @@ export default function StandingsPage() {
         <p className="mt-1 text-sm text-muted">
           Ranked by wins, head-to-head, point difference, then points scored.
         </p>
+        <p className="mt-2 text-xs font-medium text-muted sm:hidden">
+          Swipe left or right to see all columns
+        </p>
       </div>
 
       <Card>
