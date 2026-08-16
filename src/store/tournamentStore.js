@@ -231,16 +231,47 @@ export const useTournamentStore = create(
 
         removeParticipant: (tournamentId, participantId) => {
           set((state) => ({
-            tournaments: state.tournaments.map((t) =>
-              t.id === tournamentId
-                ? {
-                    ...t,
-                    participants: t.participants.filter(
-                      (p) => p.id !== participantId,
-                    ),
-                  }
-                : t,
-            ),
+            tournaments: state.tournaments.map((t) => {
+              if (t.id !== tournamentId) return t;
+
+              const participants = (t.participants ?? []).filter(
+                (p) => p.id !== participantId,
+              );
+              const hadMatches = (t.matches ?? []).length > 0;
+
+              if (!hadMatches) {
+                return {
+                  ...t,
+                  participants,
+                  status: participants.length >= 2 ? "active" : "setup",
+                };
+              }
+
+              // Rebuild the schedule from the remaining participants so the
+              // bracket/round-robin never references a removed player or team.
+              let matches = [];
+              if (participants.length >= 2) {
+                if (t.format === "round-robin") {
+                  matches = generateRoundRobinMatches(participants).map((m) => ({
+                    ...m,
+                    scoreA: null,
+                    scoreB: null,
+                    winnerId: null,
+                    status: m.isBye ? "bye" : "scheduled",
+                    isBye: m.isBye ?? false,
+                  }));
+                } else {
+                  matches = generateBracket(participants, t.seeding).matches;
+                }
+              }
+
+              return {
+                ...t,
+                participants,
+                matches,
+                status: participants.length >= 2 ? "active" : "setup",
+              };
+            }),
           }));
           syncById(tournamentId);
         },

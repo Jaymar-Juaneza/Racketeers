@@ -1,10 +1,21 @@
 import { useMemo, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
-import { ArrowLeft, Repeat, Sparkles, Swords, User, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  Repeat,
+  Shuffle,
+  Sparkles,
+  Swords,
+  User,
+  Users,
+} from "lucide-react";
 import { useTournamentStore } from "../store/tournamentStore.js";
 import { useAuthStore } from "../store/authStore.js";
 import { newParticipantEntry, validateEntries } from "../lib/participants.js";
-import { SUPPORTED_BRACKET_SIZES } from "../lib/tournament/bracket.js";
+import { shuffle, SUPPORTED_BRACKET_SIZES } from "../lib/tournament/bracket.js";
+import { Dialog } from "../components/ui/dialog.jsx";
+import { Textarea } from "../components/ui/textarea.jsx";
 import { Button } from "../components/ui/button.jsx";
 import { Label } from "../components/ui/label.jsx";
 import { Select } from "../components/ui/select.jsx";
@@ -24,6 +35,10 @@ export default function CreateTournamentPage() {
     newParticipantEntry("singles"),
     newParticipantEntry("singles"),
   ]);
+  const [randomizerOpen, setRandomizerOpen] = useState(false);
+  const [randomizerNames, setRandomizerNames] = useState("");
+  const [randomizerTeams, setRandomizerTeams] = useState([]);
+  const [randomizerError, setRandomizerError] = useState("");
 
   const isDoubles = category === "doubles";
   const parsed = useMemo(
@@ -43,6 +58,51 @@ export default function CreateTournamentPage() {
       newParticipantEntry(next),
       newParticipantEntry(next),
     ]);
+    setRandomizerOpen(false);
+    setRandomizerNames("");
+    setRandomizerTeams([]);
+    setRandomizerError("");
+  };
+
+  const runRandomizer = () => {
+    const names = String(randomizerNames)
+      .split(/\r?\n/)
+      .map((name) => name.trim())
+      .filter(Boolean);
+
+    if (names.length < 4) {
+      setRandomizerError("Enter at least 4 player names to create at least 2 teams.");
+      setRandomizerTeams([]);
+      return;
+    }
+    if (names.length % 2 !== 0) {
+      setRandomizerError("Enter an even number of players so everyone can be paired.");
+      setRandomizerTeams([]);
+      return;
+    }
+    if (new Set(names).size !== names.length) {
+      setRandomizerError("Player names must be unique.");
+      setRandomizerTeams([]);
+      return;
+    }
+
+    const shuffled = shuffle(names);
+    const teams = [];
+    for (let i = 0; i < shuffled.length; i += 2) {
+      teams.push({ player1: shuffled[i], player2: shuffled[i + 1] });
+    }
+
+    setRandomizerError("");
+    setRandomizerTeams(teams);
+  };
+
+  const acceptRandomizer = () => {
+    if (randomizerTeams.length === 0) return;
+    setEntries(randomizerTeams.map((team) => ({ ...team })));
+    setRandomizerOpen(false);
+    setRandomizerNames("");
+    setRandomizerTeams([]);
+    setRandomizerError("");
   };
 
   const onSubmit = (e) => {
@@ -168,7 +228,25 @@ export default function CreateTournamentPage() {
 
             {/* Participants — separate input per name */}
             <div className="flex flex-col gap-2">
-              <Label>{isDoubles ? "Teams" : "Players"}</Label>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label>{isDoubles ? "Teams" : "Players"}</Label>
+                {isDoubles && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setRandomizerError("");
+                      setRandomizerTeams([]);
+                      setRandomizerNames("");
+                      setRandomizerOpen(true);
+                    }}
+                  >
+                    <Shuffle className="h-3.5 w-3.5" />
+                    Randomize teams
+                  </Button>
+                )}
+              </div>
               <ParticipantEditor
                 category={category}
                 entries={entries}
@@ -218,6 +296,66 @@ export default function CreateTournamentPage() {
           </p>
         )}
       </form>
+
+      <Dialog
+        open={randomizerOpen}
+        onClose={() => setRandomizerOpen(false)}
+        title="Randomize doubles teams"
+        description="Enter player names one per line. The randomizer shuffles them into pairs and replaces your current team list when accepted."
+      >
+        <div className="flex flex-col gap-4">
+          <Textarea
+            value={randomizerNames}
+            onChange={(e) => {
+              setRandomizerNames(e.target.value);
+              setRandomizerTeams([]);
+              setRandomizerError("");
+            }}
+            rows={8}
+            placeholder={"Player names (one per line)\nAlice\nBob\nCharlie\nDana"}
+            aria-label="Player names for the randomizer"
+          />
+
+          {randomizerError && (
+            <p className="rounded-md border border-accent/30 bg-red-50 p-3 text-sm text-accent">
+              {randomizerError}
+            </p>
+          )}
+
+          {randomizerTeams.length > 0 && (
+            <div className="rounded-lg border border-line bg-mist/50 p-3">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-muted">
+                Randomized teams
+              </p>
+              <ul className="flex flex-col gap-1.5 text-sm">
+                {randomizerTeams.map((team, index) => (
+                  <li key={index} className="flex items-center justify-between gap-3">
+                    <span className="text-muted">Team {index + 1}</span>
+                    <span className="font-semibold text-ink">
+                      {team.player1} & {team.player2}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button type="button" variant="outline" onClick={runRandomizer}>
+              <Shuffle className="h-4 w-4" />
+              Randomize
+            </Button>
+            <Button
+              type="button"
+              disabled={randomizerTeams.length === 0}
+              onClick={acceptRandomizer}
+            >
+              <Check className="h-4 w-4" />
+              Accept teams
+            </Button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 }

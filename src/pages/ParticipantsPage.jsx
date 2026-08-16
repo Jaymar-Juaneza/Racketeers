@@ -197,7 +197,17 @@ export default function ParticipantsPage() {
                     {isAdmin && (
                       <button
                         type="button"
-                        onClick={() => removeParticipant(tournament.id, p.id)}
+                        onClick={() => {
+                          if (
+                            hasMatches &&
+                            !window.confirm(
+                              "Removing this entry will regenerate the matchmaking and reset any recorded scores. Continue?",
+                            )
+                          ) {
+                            return;
+                          }
+                          removeParticipant(tournament.id, p.id);
+                        }}
                         className="rounded-md p-1.5 text-muted hover:bg-red-50 hover:text-accent"
                         aria-label={`Remove ${displayName(p)}`}
                       >
