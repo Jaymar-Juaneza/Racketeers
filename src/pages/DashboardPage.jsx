@@ -237,11 +237,7 @@ export default function DashboardPage() {
           </div>
 
           {isAdmin ? (
-            tournament.status === "setup" ? (
-              <Button onClick={() => navigate(`/tournament/${tournament.id}/participants`)}>
-                Add participants
-              </Button>
-            ) : (
+            tournament.matches.length > 0 ? (
               <Button
                 variant="outline"
                 onClick={() => navigate(`/tournament/${tournament.id}/matches`)}
@@ -249,14 +245,28 @@ export default function DashboardPage() {
                 <ListChecks className="h-4 w-4" />
                 Manage scores
               </Button>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => navigate(`/tournament/${tournament.id}/participants`)}
+              >
+                View participants
+              </Button>
             )
-          ) : (
+          ) : tournament.matches.length > 0 ? (
             <Button
               variant="outline"
               onClick={() => navigate(`/tournament/${tournament.id}/matches`)}
             >
               <ListChecks className="h-4 w-4" />
               View matches
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={() => navigate(`/tournament/${tournament.id}/participants`)}
+            >
+              View participants
             </Button>
           )}
         </div>

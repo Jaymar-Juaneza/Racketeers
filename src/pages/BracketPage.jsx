@@ -158,7 +158,7 @@ export default function BracketPage() {
                 className="mt-4"
                 onClick={() => navigate(`/tournament/${tournament.id}/participants`)}
               >
-                Add participants
+                View participants
               </Button>
             )}
           </CardContent>

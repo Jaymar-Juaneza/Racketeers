@@ -509,14 +509,14 @@ export default function MatchesPage() {
               No fixtures generated yet
             </p>
             <p className="mt-1 text-sm text-muted">
-              Add participants and generate matches first.
+              No fixtures are available for this tournament yet.
             </p>
             {isAdmin && (
               <Button
                 className="mt-4"
                 onClick={() => navigate(`/tournament/${tournament.id}/participants`)}
               >
-                Add participants
+                View participants
               </Button>
             )}
           </CardContent>
