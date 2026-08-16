@@ -10,6 +10,7 @@ import {
 import {
   isValidFinishedScore,
   resolveScoreState,
+  scoreCap,
 } from "../lib/tournament/scoring.js";
 import { logGameResult } from "../lib/history.js";
 import { db } from "../lib/firebase.js";
@@ -164,8 +165,8 @@ export const useTournamentStore = create(
                   scoreA: null,
                   scoreB: null,
                   winnerId: null,
-                  status: "scheduled",
-                  isBye: false,
+                  status: m.isBye ? "bye" : "scheduled",
+                  isBye: m.isBye ?? false,
                 }),
               );
             } else {
@@ -256,8 +257,8 @@ export const useTournamentStore = create(
                   scoreA: null,
                   scoreB: null,
                   winnerId: null,
-                  status: "scheduled",
-                  isBye: false,
+                  status: m.isBye ? "bye" : "scheduled",
+                  isBye: m.isBye ?? false,
                 }));
               } else {
                 matches = generateBracket(t.participants, t.seeding).matches;
@@ -277,12 +278,19 @@ export const useTournamentStore = create(
           let nextTournament;
 
           if (tournament.format === "round-robin") {
+            const cap = scoreCap(tournament.pointSystem) ?? Infinity;
             const matches = tournament.matches.map((m) => {
               if (m.id !== matchId || m.status === "bye" || m.status === "completed") {
                 return m;
               }
-              const scoreA = Math.max(0, (m.scoreA ?? 0) + (side === "A" ? delta : 0));
-              const scoreB = Math.max(0, (m.scoreB ?? 0) + (side === "B" ? delta : 0));
+              const scoreA = Math.min(
+                cap,
+                Math.max(0, (m.scoreA ?? 0) + (side === "A" ? delta : 0)),
+              );
+              const scoreB = Math.min(
+                cap,
+                Math.max(0, (m.scoreB ?? 0) + (side === "B" ? delta : 0)),
+              );
               const { status, winnerId } = resolveScoreState(
                 scoreA,
                 scoreB,
@@ -298,13 +306,20 @@ export const useTournamentStore = create(
             });
             nextTournament = { ...tournament, matches };
           } else {
+            const cap = scoreCap(tournament.pointSystem) ?? Infinity;
             const matches = tournament.matches.map((m) => {
               if (m.id !== matchId || m.status === "bye" || m.status === "completed") {
                 return m;
               }
               const live = m.live ?? { scoreA: 0, scoreB: 0 };
-              const scoreA = Math.max(0, (live.scoreA ?? 0) + (side === "A" ? delta : 0));
-              const scoreB = Math.max(0, (live.scoreB ?? 0) + (side === "B" ? delta : 0));
+              const scoreA = Math.min(
+                cap,
+                Math.max(0, (live.scoreA ?? 0) + (side === "A" ? delta : 0)),
+              );
+              const scoreB = Math.min(
+                cap,
+                Math.max(0, (live.scoreB ?? 0) + (side === "B" ? delta : 0)),
+              );
 
               if (isValidFinishedScore(scoreA, scoreB, tournament.pointSystem)) {
                 const games = [
@@ -413,11 +428,12 @@ export const useTournamentStore = create(
     },
     {
       name: "atsi-racketeers-tournaments",
-      version: 3,
+      version: 4,
       migrate: (persistedState) => {
         const state = persistedState ?? {};
         const tournaments = (state.tournaments ?? []).map((t) => {
           if (t.format !== "bracket") return t;
+
           const matches = (t.matches ?? []).map((m) => ({
             ...m,
             games: Array.isArray(m.games) ? m.games : [],
@@ -426,6 +442,26 @@ export const useTournamentStore = create(
             status: m.status ?? "scheduled",
             winnerId: m.winnerId ?? null,
           }));
+
+          const isLegacyPowerBracket =
+            matches.length > 0 && !matches.every((m) => m.scheme === "dynamic");
+          const hasProgress = matches.some(
+            (m) => m.status === "completed" || m.status === "live",
+          );
+
+          // Fresh legacy brackets are safely regenerated into the new dynamic
+          // format so teams are paired whenever possible. Brackets with
+          // recorded results are left untouched to avoid losing scores.
+          if (isLegacyPowerBracket && !hasProgress) {
+            return {
+              ...t,
+              matches: generateBracket(
+                Array.isArray(t.participants) ? t.participants : [],
+                t.seeding,
+              ).matches,
+            };
+          }
+
           return { ...t, matches };
         });
         return { ...state, tournaments };

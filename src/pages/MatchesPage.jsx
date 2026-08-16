@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
+  AlertTriangle,
   ArrowLeft,
   Check,
   Minus,
@@ -21,6 +22,10 @@ import {
   resolveSeries,
 } from "../lib/tournament/bracket.js";
 import { statusLabel, statusVariant } from "../lib/matchStatus.js";
+import {
+  getMatchPointSides,
+  pointSystemDescription,
+} from "../lib/tournament/scoring.js";
 import { Badge } from "../components/ui/badge.jsx";
 import { Button } from "../components/ui/button.jsx";
 import {
@@ -100,9 +105,27 @@ function NameBlock({ participant, align = "right" }) {
 /* Single-game match card (round robin)                                */
 /* ------------------------------------------------------------------ */
 
+function MatchPointBadge({ sides, a, b, label = "Match point" }) {
+  if (sides.length === 0) return null;
+
+  const names = sides
+    .map((side) => (side === "A" ? a : b))
+    .filter(Boolean)
+    .map((p) => displayName(p));
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+      <AlertTriangle className="h-3 w-3" />
+      {label}
+      {names.length > 0 ? ` · ${names.join(" / ")}` : ""}
+    </span>
+  );
+}
+
 function MatchCard({
   match,
   participantMap,
+  pointSystem,
   onIncrement,
   onReopen,
   readOnly = false,
@@ -115,13 +138,24 @@ function MatchCard({
   const isCompleted = match.status === "completed";
   const scoreA = match.scoreA ?? 0;
   const scoreB = match.scoreB ?? 0;
+  const matchPointSides =
+    !isCompleted && Number.isInteger(match.scoreA) && Number.isInteger(match.scoreB)
+      ? getMatchPointSides(match.scoreA, match.scoreB, pointSystem)
+      : [];
 
   return (
     <div className="rounded-xl border border-line bg-white p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <Badge variant={statusVariant(match.status)}>
-          {statusLabel(match.status)}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={statusVariant(match.status)}>
+            {statusLabel(match.status)}
+          </Badge>
+          <MatchPointBadge
+            sides={matchPointSides}
+            a={a}
+            b={b}
+          />
+        </div>
         {!readOnly && isCompleted && (
           <Button
             variant="destructiveOutline"
@@ -229,6 +263,19 @@ function SeriesMatchCard({
   const { seriesScoreA, seriesScoreB, gamesToWin } = resolveSeries(match);
   const seriesOver = match.status === "completed";
   const winner = seriesOver && match.winnerId === match.participantAId ? a : b;
+  const matchPointSides = seriesOver
+    ? []
+    : getMatchPointSides(
+        live?.scoreA ?? null,
+        live?.scoreB ?? null,
+        tournament.pointSystem,
+      );
+  const seriesPointSides = seriesOver
+    ? []
+    : [
+        seriesScoreA === gamesToWin - 1 ? "A" : null,
+        seriesScoreB === gamesToWin - 1 ? "B" : null,
+      ].filter(Boolean);
 
   return (
     <div className="rounded-xl border border-line bg-white p-4">
@@ -240,6 +287,13 @@ function SeriesMatchCard({
           <span className="rounded-full bg-mist px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
             {bestOfLabel(match)} · {firstToLabel(match).toLowerCase()}
           </span>
+          <MatchPointBadge sides={matchPointSides} a={a} b={b} />
+          <MatchPointBadge
+            sides={seriesPointSides}
+            a={a}
+            b={b}
+            label="Series point"
+          />
         </div>
         {!readOnly && seriesOver && (
           <Button
@@ -365,7 +419,7 @@ function SeriesMatchCard({
           ) : (
             <div className="flex flex-col gap-3">
               <p className="text-center text-xs font-semibold text-muted">
-                Game {games.length + 1} · first to {tournament.pointSystem}, win by 2
+                Game {games.length + 1} · {pointSystemDescription(tournament.pointSystem).toLowerCase()}
               </p>
               <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:gap-3">
                 <LiveScoreControl
@@ -490,7 +544,7 @@ export default function MatchesPage() {
         <p className="text-sm text-muted">
           {isBracket
             ? "Best of 3 · Finals best of 5"
-            : `First to ${tournament.pointSystem} · win by 2 (no cap)`}
+            : pointSystemDescription(tournament.pointSystem)}
         </p>
       </div>
 
@@ -500,8 +554,7 @@ export default function MatchesPage() {
           <p>
             <strong className="text-ink">Best-of series:</strong> regular
             matches are first to 2 wins, and the Final is first to 3 wins. Each
-            game is won by reaching {tournament.pointSystem} points with a
-            2-point lead.
+            game uses {pointSystemDescription(tournament.pointSystem).toLowerCase()}.
           </p>
         </div>
       )}
@@ -534,6 +587,7 @@ export default function MatchesPage() {
                   key={matchKey}
                   match={m}
                   participantMap={participantMap}
+                  pointSystem={tournament.pointSystem}
                   readOnly={readOnly}
                   onIncrement={(matchId, side, delta) =>
                     incrementScore(tournament.id, matchId, side, delta)

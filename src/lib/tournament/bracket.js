@@ -109,8 +109,48 @@ export function resolveSeries(match) {
   };
 }
 
+function totalRoundsFor(participantCount) {
+  let teams = participantCount;
+  let rounds = 0;
+  while (teams > 1) {
+    teams = Math.ceil(teams / 2);
+    rounds += 1;
+  }
+  return rounds;
+}
+
+function createDynamicMatch({
+  round,
+  index,
+  totalRounds,
+  participantAId,
+  participantBId,
+  isBye,
+  winnerId,
+}) {
+  const name = roundName(round, totalRounds);
+  return {
+    id: uid("m"),
+    round,
+    index,
+    roundName: name,
+    participantAId,
+    participantBId,
+    games: [],
+    live: null,
+    gamesToWin: name === "Final" ? FINALS_GAMES_TO_WIN : REGULAR_GAMES_TO_WIN,
+    winnerId: winnerId ?? null,
+    status: isBye ? "bye" : "scheduled",
+    isBye: !!isBye,
+    scheme: "dynamic",
+  };
+}
+
 /**
- * Generate a single-elimination bracket with auto-seeding and BYEs.
+ * Generate a single-elimination bracket that pairs every team whenever
+ * possible. A bye is only used when a round has an odd number of remaining
+ * teams — so with 6 teams everyone gets a first-round matchup (3 matches)
+ * instead of two teams being parked on power-of-two byes.
  *
  * @param {Array<{id: string}>} participants
  * @param {"auto" | "random"} seeding
@@ -118,93 +158,151 @@ export function resolveSeries(match) {
  */
 export function generateBracket(participants, seeding = "auto") {
   const n = participants.length;
-  const size = bracketSizeFor(n);
-  const rounds = Math.log2(size);
+  if (n < 2) return { size: bracketSizeFor(n), rounds: 0, matches: [] };
 
   const ordered =
     seeding === "random" ? shuffle(participants) : [...participants];
-  const seedToParticipant = new Map();
-  ordered.forEach((p, i) => seedToParticipant.set(i + 1, p));
-
-  const order = seedOrder(size);
-  const slots = order.map((seed) =>
-    seed <= n ? seedToParticipant.get(seed) : null,
-  );
-
+  const totalRounds = totalRoundsFor(n);
   const matches = [];
 
-  // Round 1 — filled from seed slots; missing slots are BYEs.
-  for (let i = 0; i < size / 2; i += 1) {
-    const a = slots[i * 2];
-    const b = slots[i * 2 + 1];
-    if (!a && !b) continue;
+  let advancing = n;
+  let round = 1;
 
-    if (!a || !b) {
-      const player = a || b;
-      matches.push({
-        id: uid("m"),
-        round: 1,
-        index: i,
-        roundName: roundName(1, rounds),
-        participantAId: a ? a.id : null,
-        participantBId: b ? b.id : null,
-        games: [],
-        live: null,
-        gamesToWin: roundName(1, rounds) === "Final" ? 3 : 2,
-        winnerId: player.id,
-        status: "bye",
-        isBye: true,
-      });
-    } else {
-      matches.push({
-        id: uid("m"),
-        round: 1,
-        index: i,
-        roundName: roundName(1, rounds),
-        participantAId: a.id,
-        participantBId: b.id,
-        games: [],
-        live: null,
-        gamesToWin: roundName(1, rounds) === "Final" ? 3 : 2,
-        winnerId: null,
-        status: "scheduled",
-        isBye: false,
-      });
-    }
-  }
+  while (advancing > 1) {
+    const count = Math.ceil(advancing / 2);
 
-  // Later rounds — participants are derived from winners.
-  for (let round = 2; round <= rounds; round += 1) {
-    const count = size / 2 ** round;
     for (let i = 0; i < count; i += 1) {
-      matches.push({
-        id: uid("m"),
-        round,
-        index: i,
-        roundName: roundName(round, rounds),
-        participantAId: null,
-        participantBId: null,
-        games: [],
-        live: null,
-        gamesToWin: roundName(round, rounds) === "Final" ? 3 : 2,
-        winnerId: null,
-        status: "scheduled",
-        isBye: false,
-      });
+      const hasOpponent = i * 2 + 1 < advancing;
+
+      if (round === 1) {
+        const a = ordered[i * 2];
+        const b = hasOpponent ? ordered[i * 2 + 1] : null;
+        matches.push(
+          createDynamicMatch({
+            round,
+            index: i,
+            totalRounds,
+            participantAId: a.id,
+            participantBId: b ? b.id : null,
+            isBye: !b,
+            winnerId: !b ? a.id : null,
+          }),
+        );
+      } else {
+        matches.push(
+          createDynamicMatch({
+            round,
+            index: i,
+            totalRounds,
+            participantAId: null,
+            participantBId: null,
+            isBye: !hasOpponent,
+            winnerId: null,
+          }),
+        );
+      }
+    }
+
+    advancing = count;
+    round += 1;
+  }
+
+  return {
+    size: bracketSizeFor(n),
+    rounds: totalRounds,
+    matches: refreshBracket(matches),
+  };
+}
+
+function refreshDynamicBracket(matches) {
+  const maxRound = matches.reduce((max, m) => Math.max(max, m.round), 0);
+  if (maxRound <= 0) return [];
+
+  const byRound = new Map();
+  for (const m of matches) {
+    if (!byRound.has(m.round)) byRound.set(m.round, []);
+    byRound.get(m.round).push(m);
+  }
+  for (const list of byRound.values()) {
+    list.sort((a, b) => a.index - b.index);
+  }
+
+  const result = [];
+
+  for (let round = 1; round <= maxRound; round += 1) {
+    const inRound = byRound.get(round) ?? [];
+
+    if (round === 1) {
+      for (const m of inRound) {
+        if (m.isBye) {
+          const playerId = m.participantAId ?? m.participantBId ?? null;
+          result.push({
+            ...m,
+            participantAId: playerId,
+            participantBId: null,
+            winnerId: playerId,
+            status: "bye",
+            isBye: true,
+          });
+        } else {
+          result.push({ ...m, isBye: false });
+        }
+      }
+      continue;
+    }
+
+    const prev = result
+      .filter((m) => m.round === round - 1)
+      .sort((a, b) => a.index - b.index);
+    const winners = prev.map((m) => m.winnerId ?? null);
+
+    for (let i = 0; i < inRound.length; i += 1) {
+      const m = inRound[i];
+      const aId = winners[i * 2] ?? null;
+      const bId = winners[i * 2 + 1] ?? null;
+
+      if (m.isBye) {
+        result.push({
+          ...m,
+          participantAId: aId,
+          participantBId: null,
+          winnerId: aId,
+          status: "bye",
+          games: [],
+          live: null,
+          isBye: true,
+        });
+        continue;
+      }
+
+      const changed =
+        m.participantAId !== aId || m.participantBId !== bId;
+
+      if (changed) {
+        result.push({
+          ...m,
+          participantAId: aId,
+          participantBId: bId,
+          winnerId: null,
+          status: "scheduled",
+          games: [],
+          live: null,
+          isBye: false,
+        });
+      } else {
+        result.push({ ...m, isBye: false });
+      }
     }
   }
 
-  return { size, rounds, matches: refreshBracket(matches) };
+  return result;
 }
 
 /**
- * Derive participants for every round > 1 from the winners of the previous
- * round. If a matchup changes (e.g. an earlier result was edited or reopened),
- * the affected downstream match is reset.
- *
- * Pure: returns a new matches array.
+ * Legacy refresh for power-of-two brackets generated before the dynamic
+ * bracket format. Kept so existing tournaments keep working as-is.
  */
-export function refreshBracket(matches) {
+function refreshPowerBracket(matches) {
   const maxRound = matches.reduce((max, m) => Math.max(max, m.round), 0);
 
   const result = [];
@@ -246,6 +344,22 @@ export function refreshBracket(matches) {
     }
   }
   return result;
+}
+
+/**
+ * Derive participants for every round > 1 from the winners of the previous
+ * round. Supports both the new dynamic bracket format and legacy power-of-two
+ * brackets. If a matchup changes (e.g. an earlier result was edited or
+ * reopened), the affected downstream match is reset.
+ *
+ * Pure: returns a new matches array.
+ */
+export function refreshBracket(matches) {
+  if (!Array.isArray(matches) || matches.length === 0) return [];
+  if (matches.every((m) => m.scheme === "dynamic")) {
+    return refreshDynamicBracket(matches);
+  }
+  return refreshPowerBracket(matches);
 }
 
 /** Winner of the final match, if it has been decided. */

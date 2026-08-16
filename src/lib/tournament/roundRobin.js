@@ -3,10 +3,11 @@ import { uid } from "../utils.js";
 /**
  * Generate a single round-robin schedule where every participant plays every
  * other participant exactly once (circle method). An odd number of
- * participants produces a bye for one participant each round.
+ * participants produces one explicit bye match each round so every team is
+ * always represented on the schedule.
  *
  * @param {Array<{id: string}>} participants
- * @returns {Array<{id: string, round: number, participantAId: string, participantBId: string}>}
+ * @returns {Array<{id: string, round: number, roundName: string, participantAId: string, participantBId: string|null, isBye: boolean}>}
  */
 export function generateRoundRobinMatches(participants) {
   const n = participants.length;
@@ -26,13 +27,28 @@ export function generateRoundRobinMatches(participants) {
     for (let i = 0; i < slotCount / 2; i += 1) {
       const a = slots[i];
       const b = slots[slotCount - 1 - i];
-      if (a === null || b === null) continue; // bye for this participant
+
+      if (a === null || b === null) {
+        // Explicit bye so the team without an opponent is still shown.
+        const player = a ?? b;
+        matches.push({
+          id: uid("m"),
+          round: roundNumber,
+          roundName: `Round ${roundNumber}`,
+          participantAId: player,
+          participantBId: null,
+          isBye: true,
+        });
+        continue;
+      }
+
       matches.push({
         id: uid("m"),
         round: roundNumber,
         roundName: `Round ${roundNumber}`,
         participantAId: a,
         participantBId: b,
+        isBye: false,
       });
     }
 

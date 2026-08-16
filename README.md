@@ -71,11 +71,13 @@ You can now sign in with username `admin` and the password you set.
 
 - Singles and Doubles tournaments
 - Round Robin (auto fixtures + standings) and single-elimination Bracket (auto
-  seeding, random seeding option, BYEs)
+  seeding, random seeding option, byes only when a round has an odd number of
+  teams)
 - Best-of series for brackets: Best of 3 (first to 2 wins) for regular rounds
   and Best of 5 (first to 3 wins) for the Final — winning games in a row closes
   the series early
-- 15-point and 21-point scoring with win-by-2 rules and no upper cap
+- 21-point scoring with BWF-style rules: win by 2, capped at 30 (next point
+  wins after 29-29) · 15-point scoring with win-by-2 rules and no cap
 - Score recording with **− / + steppers**, editing, and re-opening matches
 - Dashboard, Standings, and interactive Bracket views
 - Responsive desktop / tablet / mobile layout

@@ -150,8 +150,8 @@ export default function CreateTournamentPage() {
                 <Swords className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <span>
                   <strong className="text-ink">Single elimination:</strong>{" "}
-                  best of 3 series · Final is best of 5. Byes are added
-                  automatically.
+                  best of 3 series · Final is best of 5. Byes are only added
+                  when a round has an odd number of teams.
                 </span>
               </div>
             )}
@@ -160,7 +160,8 @@ export default function CreateTournamentPage() {
                 <Repeat className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <span>
                   <strong className="text-ink">Round robin:</strong> everyone
-                  plays everyone once. An odd count gets a bye each round.
+                  plays everyone once. An odd count gets one bye match each
+                  round.
                 </span>
               </div>
             )}
